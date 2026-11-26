@@ -28,14 +28,34 @@
       position: absolute; top: 10px; left: 10px; z-index: 12;
       background: rgba(15, 23, 42, 0.86); color: #e2e8f0;
       padding: 8px 11px; border-radius: 10px; font-size: 11.5px; line-height: 1.45;
-      border: 1px solid rgba(255,255,255,0.16); max-width: 44vw; pointer-events: auto;
+      border: 1px solid rgba(255,255,255,0.16); max-width: 46vw; pointer-events: auto;
     }
-    .bar-row { display: flex; align-items: center; gap: 6px; margin-top: 3px; }
-    .bar-label { width: 58px; color: #cbd5e1; font-size: 11px; }
-    .bar-track { flex: 1; height: 7px; background: rgba(255,255,255,0.14); border-radius: 999px; overflow: hidden; min-width: 72px; }
+    .bar-row { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+    .bar-label { width: 52px; color: #cbd5e1; font-size: 11px; }
+    .bar-track {
+      position: relative; flex: 1; height: 9px;
+      background: rgba(255,255,255,0.14); border-radius: 999px; overflow: hidden; min-width: 96px;
+    }
     .bar-fill-sharp { height: 100%; background: #38bdf8; width: 100%; transition: width 0.12s; }
-    .bar-fill-heat  { height: 100%; background: #f97316; width: 0%; transition: width 0.12s; }
+    .bar-fill-charge { height: 100%; background: #f97316; width: 0%; transition: width 0.12s; }
+    .bar-fill-charge.tier-mid { background: #fbbf24; }
+    .bar-fill-charge.tier-high { background: #ef4444; }
+
+    /* 蓄能 35 / 70 分段刻度線 */
+    .tick-mark {
+      position: absolute; top: 0; bottom: 0; width: 2px;
+      background: rgba(255, 255, 255, 0.85); z-index: 2; pointer-events: none;
+    }
+    .tick-35 { left: 35%; }
+    .tick-70 { left: 70%; }
+
     .bar-val { width: 42px; text-align: right; font-size: 11px; font-weight: bold; }
+
+    .charge-tier-hint {
+      margin-top: 2px; font-size: 10px; color: #cbd5e1;
+      display: flex; justify-content: space-between;
+    }
+    #val-charge-tier { color: #fde68a; font-weight: bold; }
 
     #hud-status-line {
       margin-top: 5px; font-size: 11px; color: #fde68a; word-break: break-word;
@@ -87,7 +107,7 @@
       pointer-events: none;
     }
 
-    /* 右下：7 鍵中的 1～5 號戰鬥與戰術鍵（弧形／分層擺放） */
+    /* 右下：7 鍵中的 1～5 號戰鬥與戰術鍵 */
     #combat-keys {
       position: absolute; bottom: 20px; right: 20px; z-index: 12;
       width: 230px; height: 156px; pointer-events: none;
@@ -104,16 +124,16 @@
     .key-btn:active, .key-btn.active { transform: scale(0.92); filter: brightness(1.2); }
     .key-sub { font-size: 9.5px; opacity: 0.85; font-weight: normal; margin-top: 1px; }
 
-    /* 高頻主區：1 輕斬、2 重擊、3 閃避 */
+    /* 高頻主區：1 普攻、2 重擊、3 閃避 */
     #key-1 { width: 76px; height: 76px; right: 4px; bottom: 4px; font-size: 14px; background: rgba(220, 38, 38, 0.88); }
     #key-2 { width: 62px; height: 62px; right: 88px; bottom: 8px; font-size: 12.5px; background: rgba(217, 119, 6, 0.88); }
     #key-3 { width: 62px; height: 62px; right: 6px; bottom: 88px; font-size: 12.5px; background: rgba(2, 132, 199, 0.88); }
 
-    /* 中頻戰術區：4 解放/冷卻、5 格擋 */
-    #key-4 { width: 54px; height: 54px; right: 158px; bottom: 16px; font-size: 11px; background: rgba(147, 51, 234, 0.86); }
+    /* 中頻戰術區：4 解放、5 格擋 */
+    #key-4 { width: 54px; height: 54px; right: 158px; bottom: 16px; font-size: 11.5px; background: rgba(147, 51, 234, 0.86); }
     #key-5 { width: 54px; height: 54px; right: 76px; bottom: 78px; font-size: 11.5px; background: rgba(15, 118, 110, 0.88); }
 
-    /* 右上功能區：6 鎖定、7 負重切換 */
+    /* 右上功能區：6 鎖定、7 切裝 */
     #key-6, #key-7 {
       position: static; width: 56px; height: 42px; border-radius: 10px;
       font-size: 11px; background: rgba(30, 41, 59, 0.9);
@@ -134,20 +154,28 @@
   <div id="viewport-rotator">
     <div id="canvas-container">
       <div id="hud-combat">
-        <div><strong>雲海群島｜橫向 7 鍵＆戰鬥測試</strong></div>
+        <div><strong>雲海群島｜橫向 7 鍵與戰鬥測試</strong></div>
         <div class="bar-row">
           <span class="bar-label">鋒利度</span>
           <div class="bar-track"><div id="bar-sharp" class="bar-fill-sharp"></div></div>
           <span id="val-sharp" class="bar-val">100</span>
         </div>
         <div class="bar-row">
-          <span class="bar-label">晶刃熱度</span>
-          <div class="bar-track"><div id="bar-heat" class="bar-fill-heat"></div></div>
-          <span id="val-heat" class="bar-val">0</span>
+          <span class="bar-label">蓄能</span>
+          <div class="bar-track">
+            <div class="tick-mark tick-35" title="35 門檻"></div>
+            <div class="tick-mark tick-70" title="70 門檻"></div>
+            <div id="bar-charge" class="bar-fill-charge"></div>
+          </div>
+          <span id="val-charge" class="bar-val">0</span>
+        </div>
+        <div class="charge-tier-hint">
+          <span>刻度：0 | 35 | 70 | 100</span>
+          <span id="val-charge-tier">冷卻區 (0~34)</span>
         </div>
         <div id="hud-status-line">
-          負重: <span id="val-weight" style="color:#4ade80;font-weight:bold;">輕裝</span> ｜
-          角晶耐久: <span id="val-horn" style="color:#fbbf24;font-weight:bold;">6</span>
+          裝備重量: <span id="val-weight" style="color:#4ade80;font-weight:bold;">輕裝</span> ｜
+          弱點: <span id="val-weak" style="color:#fbbf24;font-weight:bold;">6</span>
         </div>
         <div id="status-text" style="margin-top:3px;font-size:11px;color:#cbd5e1;">狀態：初始化中...</div>
         <div class="file-row">
@@ -169,7 +197,7 @@
         </div>
         <div id="util-keys">
           <div id="key-6" class="key-btn" role="button">鎖定<span class="key-sub">[6 / O]</span></div>
-          <div id="key-7" class="key-btn" role="button">負重<span class="key-sub">[7 / P]</span></div>
+          <div id="key-7" class="key-btn" role="button">切裝<span class="key-sub">[7 / P]</span></div>
         </div>
       </div>
 
@@ -180,7 +208,7 @@
         <div id="key-5" class="key-btn" role="button">格擋<span class="key-sub">[5 / L]</span></div>
         <div id="key-2" class="key-btn" role="button">重擊<span class="key-sub">[2 / U]</span></div>
         <div id="key-3" class="key-btn" role="button">閃避<span class="key-sub">[3 / K]</span></div>
-        <div id="key-1" class="key-btn" role="button">輕斬<span class="key-sub">[1 / J]</span></div>
+        <div id="key-1" class="key-btn" role="button">普攻<span class="key-sub">[1 / J]</span></div>
       </div>
     </div>
   </div>
@@ -203,7 +231,6 @@
       setStatus(`非同步錯誤：${event.reason?.message || event.reason}`, true);
     });
 
-    // 若裝置目前為直立（innerHeight > innerWidth），自動將畫面容器轉 90 度成橫向
     let isCssRotated90 = false;
 
     function applyViewportOrientationLayout() {
@@ -501,7 +528,7 @@
       loadVRMFromUrl(URL.createObjectURL(file), file.name);
     });
 
-    // 敵人與可破壞角晶部位
+    // 敵人與可破壞弱點部位
     const enemyRoot = new THREE.Group();
     enemyRoot.position.set(0, 0, -4.5);
     scene.add(enemyRoot);
@@ -514,10 +541,10 @@
     enemyBody.position.y = 1.1;
     enemyRoot.add(enemyBody);
 
-    const hornMat = new THREE.MeshLambertMaterial({ color: 0xf59e0b });
-    const enemyHorn = new THREE.Mesh(new THREE.ConeGeometry(0.36, 0.95, 6), hornMat);
-    enemyHorn.position.set(0, 2.25, 0.2);
-    enemyRoot.add(enemyHorn);
+    const weakPointMat = new THREE.MeshLambertMaterial({ color: 0xf59e0b });
+    const enemyWeakPoint = new THREE.Mesh(new THREE.ConeGeometry(0.36, 0.95, 6), weakPointMat);
+    enemyWeakPoint.position.set(0, 2.25, 0.2);
+    enemyRoot.add(enemyWeakPoint);
 
     const lockRing = new THREE.Mesh(
       new THREE.RingGeometry(1.35, 1.55, 24),
@@ -535,11 +562,11 @@
     ];
 
     const combat = {
-      sharpness: 100,
-      heat: 0,
-      weightIdx: 0,
-      hornHp: 6,
-      hornBroken: false,
+      sharpness: 100,   // 0 ~ 100
+      charge: 0,        // 0 ~ 100（刻度線：35 / 70）
+      weightIdx: 0,     // 0: 輕裝, 1: 中裝, 2: 重裝
+      weakHp: 6,        // 弱點血量
+      weakBroken: false,
       lockedTarget: false,
       guarding: false,
       dodgeCooldown: 0
@@ -548,30 +575,45 @@
     let enemyHitFlash = 0;
 
     const barSharp = document.getElementById('bar-sharp');
-    const barHeat = document.getElementById('bar-heat');
+    const barCharge = document.getElementById('bar-charge');
     const valSharp = document.getElementById('val-sharp');
-    const valHeat = document.getElementById('val-heat');
+    const valCharge = document.getElementById('val-charge');
+    const valChargeTier = document.getElementById('val-charge-tier');
     const valWeight = document.getElementById('val-weight');
-    const valHorn = document.getElementById('val-horn');
+    const valWeak = document.getElementById('val-weak');
+
+    function getChargeIntervalInfo(chargeVal) {
+      if (chargeVal >= 70) {
+        return { tier: 'high', label: '滿載解放 (70~100)', cssClass: 'tier-high' };
+      }
+      if (chargeVal >= 35) {
+        return { tier: 'mid', label: '一段解放 (35~69)', cssClass: 'tier-mid' };
+      }
+      return { tier: 'low', label: '冷卻區 (0~34)', cssClass: '' };
+    }
 
     function syncCombatHud() {
       const s = Math.max(0, Math.min(100, Math.round(combat.sharpness)));
-      const h = Math.max(0, Math.min(100, Math.round(combat.heat)));
+      const c = Math.max(0, Math.min(100, Math.round(combat.charge)));
       barSharp.style.width = `${s}%`;
-      barHeat.style.width = `${h}%`;
+      barCharge.style.width = `${c}%`;
       valSharp.textContent = s;
-      valHeat.textContent = h;
+      valCharge.textContent = c;
+
+      const info = getChargeIntervalInfo(c);
+      barCharge.className = `bar-fill-charge ${info.cssClass}`.trim();
+      valChargeTier.textContent = info.label;
 
       const tier = WEIGHT_TIERS[combat.weightIdx];
       valWeight.textContent = tier.label;
       valWeight.style.color = tier.color;
 
-      if (combat.hornBroken) {
-        valHorn.textContent = '已破壞';
-        valHorn.style.color = '#f87171';
+      if (combat.weakBroken) {
+        valWeak.textContent = '已破壞';
+        valWeak.style.color = '#f87171';
       } else {
-        valHorn.textContent = `${combat.hornHp}`;
-        valHorn.style.color = '#fbbf24';
+        valWeak.textContent = `${combat.weakHp}`;
+        valWeak.style.color = '#fbbf24';
       }
     }
     syncCombatHud();
@@ -612,7 +654,6 @@
       const cy = rect.top + rect.height / 2;
       const maxR = Math.min(rect.width, rect.height) / 2 - 10;
 
-      // 螢幕座標偏移轉回旋轉後容器的本地座標
       const rawDx = touch.clientX - cx;
       const rawDy = touch.clientY - cy;
       let dx = rawDx;
@@ -649,7 +690,7 @@
       return 0.72;
     }
 
-    function applyHitToEnemy(basePartDamage, label) {
+    function applyHitToEnemy(baseWeakDamage, label) {
       const dist = playerRoot.position.distanceTo(enemyRoot.position);
       if (dist > 3.85) {
         setStatus(`狀態：${label}（揮空）`);
@@ -657,32 +698,33 @@
       }
       enemyHitFlash = 0.16;
       const sharpMult = getSharpnessMult();
-      const heatBonus = 1 + (combat.heat / 100) * 0.45;
-      const totalPartDmg = basePartDamage * sharpMult * heatBonus;
+      const chargeBonus = 1 + (combat.charge / 100) * 0.45;
+      const totalWeakDmg = baseWeakDamage * sharpMult * chargeBonus;
 
-      if (!combat.hornBroken) {
-        combat.hornHp = Math.max(0, +(combat.hornHp - totalPartDmg).toFixed(1));
-        if (combat.hornHp <= 0) {
-          combat.hornBroken = true;
-          if (enemyHorn.parent) enemyRoot.remove(enemyHorn);
-          enemyHorn.geometry.dispose();
-          hornMat.dispose();
-          setStatus(`狀態：${label} 命中！角晶部位破壞！`);
+      if (!combat.weakBroken) {
+        combat.weakHp = Math.max(0, +(combat.weakHp - totalWeakDmg).toFixed(1));
+        if (combat.weakHp <= 0) {
+          combat.weakBroken = true;
+          if (enemyWeakPoint.parent) enemyRoot.remove(enemyWeakPoint);
+          enemyWeakPoint.geometry.dispose();
+          weakPointMat.dispose();
+          setStatus(`狀態：${label} 命中！弱點破壞！`);
         } else {
-          setStatus(`狀態：${label} 命中！角晶耐久 ${combat.hornHp.toFixed(1)}`);
+          setStatus(`狀態：${label} 命中！弱點剩餘 ${combat.weakHp.toFixed(1)}`);
         }
       } else {
-        setStatus(`狀態：${label} 命中目標（角晶已破壞）`);
+        setStatus(`狀態：${label} 命中目標（弱點已破壞）`);
       }
       syncCombatHud();
     }
 
-    function triggerLightAttack() {
+    // 鍵 1：普攻
+    function triggerNormalAttack() {
       if (actionLock) return;
       actionLock = 'light';
       actionDuration = ATTACK_LIGHT_DUR;
       actionTimer = ATTACK_LIGHT_DUR;
-      combat.heat = Math.min(100, combat.heat + 12);
+      combat.charge = Math.min(100, combat.charge + 12);
       combat.sharpness = Math.max(0, combat.sharpness - 4);
 
       const fx = -Math.sin(playerRoot.rotation.y);
@@ -690,16 +732,17 @@
       playerRoot.position.x += fx * 0.32;
       playerRoot.position.z += fz * 0.32;
 
-      applyHitToEnemy(1.0, '鍵1 輕斬');
+      applyHitToEnemy(1.0, '鍵1 普攻');
       syncCombatHud();
     }
 
+    // 鍵 2：重擊
     function triggerHeavyAttack() {
       if (actionLock) return;
       actionLock = 'heavy';
       actionDuration = ATTACK_HEAVY_DUR;
       actionTimer = ATTACK_HEAVY_DUR;
-      combat.heat = Math.min(100, combat.heat + 22);
+      combat.charge = Math.min(100, combat.charge + 22);
       combat.sharpness = Math.max(0, combat.sharpness - 9);
 
       const fx = -Math.sin(playerRoot.rotation.y);
@@ -707,10 +750,11 @@
       playerRoot.position.x += fx * 0.55;
       playerRoot.position.z += fz * 0.55;
 
-      applyHitToEnemy(2.4, '鍵2 重擊破晶');
+      applyHitToEnemy(2.4, '鍵2 重擊');
       syncCombatHud();
     }
 
+    // 鍵 3：閃避
     function triggerDodge() {
       if (actionLock || combat.dodgeCooldown > 0) return;
       const tier = WEIGHT_TIERS[combat.weightIdx];
@@ -719,40 +763,48 @@
       actionTimer = 0.26;
       dashTimer = 0.26;
       combat.dodgeCooldown = tier.dashCd;
-      combat.heat = Math.max(0, combat.heat - 5);
-      setStatus(`狀態：鍵3 閃避（${tier.label}衝刺）`);
+      combat.charge = Math.max(0, combat.charge - 5);
+      setStatus(`狀態：鍵3 閃避（${tier.label}）`);
       syncCombatHud();
     }
 
-    function triggerReleaseOrCool() {
+    // 鍵 4：解放（依 35 / 70 蓄能刻度區間觸發）
+    function triggerRelease() {
       if (actionLock) return;
       actionLock = 'release';
       actionDuration = RELEASE_DUR;
       actionTimer = RELEASE_DUR;
 
-      if (combat.heat >= 35) {
-        const spentHeat = combat.heat;
-        combat.heat = 0;
-        combat.sharpness = Math.min(100, combat.sharpness + 18);
-        applyHitToEnemy(1.5 + (spentHeat / 100) * 2.5, `鍵4 晶刃解放(耗熱${Math.round(spentHeat)})`);
+      if (combat.charge >= 70) {
+        const spent = combat.charge;
+        combat.charge = 0;
+        combat.sharpness = Math.min(100, combat.sharpness + 22);
+        applyHitToEnemy(2.2 + (spent / 100) * 3.0, `鍵4 滿載解放(耗蓄能${Math.round(spent)})`);
+      } else if (combat.charge >= 35) {
+        const spent = combat.charge;
+        combat.charge = 0;
+        combat.sharpness = Math.min(100, combat.sharpness + 15);
+        applyHitToEnemy(1.4 + (spent / 100) * 1.8, `鍵4 一段解放(耗蓄能${Math.round(spent)})`);
       } else {
         combat.sharpness = Math.min(100, combat.sharpness + 25);
-        combat.heat = Math.max(0, combat.heat - 15);
-        setStatus('狀態：鍵4 晶刃回鋒冷卻（鋒利度回復）');
+        combat.charge = Math.max(0, combat.charge - 10);
+        setStatus('狀態：鍵4 冷卻區回鋒（鋒利度回復）');
       }
       syncCombatHud();
     }
 
+    // 鍵 5：格擋
     function setGuarding(active) {
       combat.guarding = active;
       const btn5 = document.getElementById('key-5');
       btn5.classList.toggle('active', active);
       if (active) {
         const tier = WEIGHT_TIERS[combat.weightIdx];
-        setStatus(`狀態：鍵5 格擋架招中（負重後退係數 ${tier.guardPush}）`);
+        setStatus(`狀態：鍵5 格擋中（${tier.label}後退係數 ${tier.guardPush}）`);
       }
     }
 
+    // 鍵 6：鎖定
     function toggleLockTarget() {
       combat.lockedTarget = !combat.lockedTarget;
       lockRing.visible = combat.lockedTarget;
@@ -761,17 +813,18 @@
       setStatus(`狀態：鍵6 ${combat.lockedTarget ? '已鎖定目標' : '解除鎖定'}`);
     }
 
+    // 鍵 7：切裝（切換裝備重量）
     function cycleWeightTier() {
       combat.weightIdx = (combat.weightIdx + 1) % WEIGHT_TIERS.length;
       const tier = WEIGHT_TIERS[combat.weightIdx];
       syncCombatHud();
-      setStatus(`狀態：鍵7 切換負重 → ${tier.label}（移速 ${tier.moveMult}x）`);
+      setStatus(`狀態：鍵7 切裝 → ${tier.label}（移速 ${tier.moveMult}x）`);
     }
 
-    document.getElementById('key-1').addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); triggerLightAttack(); });
+    document.getElementById('key-1').addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); triggerNormalAttack(); });
     document.getElementById('key-2').addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); triggerHeavyAttack(); });
     document.getElementById('key-3').addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); triggerDodge(); });
-    document.getElementById('key-4').addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); triggerReleaseOrCool(); });
+    document.getElementById('key-4').addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); triggerRelease(); });
 
     const btn5 = document.getElementById('key-5');
     btn5.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); setGuarding(!combat.guarding); });
@@ -783,10 +836,10 @@
     window.addEventListener('keydown', (e) => {
       if (e.repeat) return;
       keys[e.code] = true;
-      if (e.code === 'Digit1' || e.code === 'KeyJ') triggerLightAttack();
+      if (e.code === 'Digit1' || e.code === 'KeyJ') triggerNormalAttack();
       if (e.code === 'Digit2' || e.code === 'KeyU') triggerHeavyAttack();
       if (e.code === 'Digit3' || e.code === 'KeyK' || e.code === 'Space') triggerDodge();
-      if (e.code === 'Digit4' || e.code === 'KeyI') triggerReleaseOrCool();
+      if (e.code === 'Digit4' || e.code === 'KeyI') triggerRelease();
       if (e.code === 'Digit5' || e.code === 'KeyL') setGuarding(true);
       if (e.code === 'Digit6' || e.code === 'KeyO') toggleLockTarget();
       if (e.code === 'Digit7' || e.code === 'KeyP') cycleWeightTier();
@@ -937,7 +990,7 @@
     let frameCount = 0;
     let fpsTimer = 0;
 
-    setStatus('狀態：就緒（直立自動轉橫向＋7 鍵測試）');
+    setStatus('狀態：就緒（7 鍵與 35/70 蓄能刻度）');
 
     function animate() {
       requestAnimationFrame(animate);
@@ -948,8 +1001,8 @@
         combat.dodgeCooldown = Math.max(0, combat.dodgeCooldown - delta);
       }
 
-      if (!actionLock && combat.heat > 0) {
-        combat.heat = Math.max(0, combat.heat - delta * 2.2);
+      if (!actionLock && combat.charge > 0) {
+        combat.charge = Math.max(0, combat.charge - delta * 2.2);
         syncCombatHud();
       }
 
