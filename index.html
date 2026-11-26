@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>雲海群島 - FBX 動作驅動 VRM 測試</title>
+  <title>雲海群島 - FBX 單次動作鎖定測試</title>
   <style>
     * { box-sizing: border-box; user-select: none; -webkit-user-select: none; margin: 0; padding: 0; }
     html, body { width: 100%; height: 100%; overflow: hidden; background: #000000; font-family: sans-serif; touch-action: none; }
@@ -295,13 +295,13 @@
     let fbxMixer = null;
 
     const fbxSlots = {
-      idle: { clip: null, action: null, ok: false, tracks: 0, sampleBone: '無' },
-      walk: { clip: null, action: null, ok: false, tracks: 0, sampleBone: '無' },
-      attack: { clip: null, action: null, ok: false, tracks: 0, sampleBone: '無' },
-      dodge: { clip: null, action: null, ok: false, tracks: 0, sampleBone: '無' }
+      idle: { clip: null, action: null, duration: 0, ok: false, tracks: 0, sampleBone: '無' },
+      walk: { clip: null, action: null, duration: 0, ok: false, tracks: 0, sampleBone: '無' },
+      attack: { clip: null, action: null, duration: 0, ok: false, tracks: 0, sampleBone: '無' },
+      dodge: { clip: null, action: null, duration: 0, ok: false, tracks: 0, sampleBone: '無' }
     };
     let activeFbxAction = null;
-    let activeFbxSlotKey = null;
+    let lockedSlotKey = null; // 單次動作鎖定：'attack' 或 'dodge'
 
     const BONE_ALIASES = {
       hips: ['hips', 'pelvis', 'mixamorighips'],
@@ -335,7 +335,6 @@
       return null;
     }
 
-    // 將 FBX 旋轉轉為「相對於第一幀的變化量」，並做安全幅度限制以避免對折翻轉
     function buildSafeDeltaClip(rawClip, vrm) {
       if (!rawClip || !vrm?.humanoid) return null;
       const tracks = [];
@@ -363,11 +362,9 @@
         for (let i = 0; i < count; i++) {
           const idx = i * 4;
           qCur.set(values[idx], values[idx + 1], values[idx + 2], values[idx + 3]).normalize();
-          // delta = q0^-1 * qCur（局部空間相對變化）
           qDelta.copy(q0Inv).multiply(qCur).normalize();
-          // 限制單一根骨頭最大偏轉角，防止跨骨架軸向差造成對折／反轉
           const angle = qDelta.angleTo(qIdentity);
-          const maxAngle = 0.85;
+          const maxAngle = 1.05;
           if (angle > maxAngle && angle > 1e-5) {
             qDelta.slerp(qIdentity, 1 - maxAngle / angle).normalize();
           }
@@ -377,12 +374,7 @@
           outValues[idx + 3] = qDelta.w;
         }
 
-        const safeTrack = new THREE.QuaternionKeyframeTrack(
-          `${targetNode.name}.quaternion`,
-          track.times,
-          outValues
-        );
-        tracks.push(safeTrack);
+        tracks.push(new THREE.QuaternionKeyframeTrack(`${targetNode.name}.quaternion`, track.times, outValues));
       }
 
       return tracks.length > 0 ? new THREE.AnimationClip(rawClip.name, rawClip.duration, tracks) : null;
@@ -392,10 +384,11 @@
       if (!currentVrm) return;
       fbxMixer = new THREE.AnimationMixer(currentVrm.scene);
       activeFbxAction = null;
-      activeFbxSlotKey = null;
+      lockedSlotKey = null;
 
       for (const [slotKey, slot] of Object.entries(fbxSlots)) {
         slot.action = null;
+        slot.duration = slot.clip?.duration || 0;
         if (slot.clip) {
           const safeClip = buildSafeDeltaClip(slot.clip, currentVrm);
           if (safeClip) {
@@ -412,11 +405,10 @@
       }
     }
 
-    function playFbxSlot(slotKey, fadeTime = 0.14) {
+    function playFbxSlot(slotKey, fadeTime = 0.12) {
       const nextAction = fbxSlots[slotKey]?.action;
       if (!nextAction) return false;
-      if (activeFbxAction === nextAction && nextAction.isRunning()) {
-        activeFbxSlotKey = slotKey;
+      if (activeFbxAction === nextAction && nextAction.isRunning() && slotKey !== 'attack' && slotKey !== 'dodge') {
         return true;
       }
 
@@ -429,7 +421,6 @@
         activeFbxAction.crossFadeTo(nextAction, fadeTime, false);
       }
       activeFbxAction = nextAction;
-      activeFbxSlotKey = slotKey;
       return true;
     }
 
@@ -468,7 +459,7 @@
       rebuildFbxActions();
 
       const report = Object.entries(fbxSlots).map(([k, s]) =>
-        `${k}:${s.ok ? `OK(${s.tracks}軌,${s.sampleBone})` : `FAIL(${s.sampleBone})`}`
+        `${k}:${s.ok ? `OK(${s.tracks}軌,${s.duration.toFixed(1)}s)` : `FAIL(${s.sampleBone})`}`
       );
       fbxReportEl.textContent = report.join(' | ');
     }
@@ -610,8 +601,8 @@
       moveInput.z = dy / maxR;
     }
 
-    const DASH_DURATION = 0.28;
-    const ATTACK_DURATION = 0.45;
+    const DEFAULT_DODGE_DURATION = 0.35;
+    const DEFAULT_ATTACK_DURATION = 0.48;
     let dashTimer = 0;
     let attackTimer = 0;
     let walkPhase = 0;
@@ -619,15 +610,19 @@
     let targetYaw = 0;
 
     function triggerDodge() {
-      if (dashTimer > 0) return;
-      dashTimer = DASH_DURATION;
+      if (lockedSlotKey) return;
+      const clipDur = fbxSlots.dodge.duration || 0;
+      dashTimer = clipDur > 0 ? Math.min(clipDur, 1.2) : DEFAULT_DODGE_DURATION;
+      lockedSlotKey = 'dodge';
       playFbxSlot('dodge', 0.08);
-      setStatus('狀態：發動閃避 (Dodge)！');
+      setStatus(`狀態：發動閃避 (Dodge)${fbxSlots.dodge.action ? ' [FBX]' : ' [內建]'}！`);
     }
 
     function triggerAttack() {
-      if (attackTimer > 0) return;
-      attackTimer = ATTACK_DURATION;
+      if (lockedSlotKey) return;
+      const clipDur = fbxSlots.attack.duration || 0;
+      attackTimer = clipDur > 0 ? Math.min(clipDur, 1.4) : DEFAULT_ATTACK_DURATION;
+      lockedSlotKey = 'attack';
       playFbxSlot('attack', 0.08);
 
       const forwardX = -Math.sin(playerRoot.rotation.y);
@@ -652,7 +647,7 @@
           setStatus('狀態：斬擊命中測試怪！');
         }
       } else {
-        setStatus('狀態：發動斬擊 (Sword Slash)！');
+        setStatus(`狀態：發動斬擊 (Sword Slash)${fbxSlots.attack.action ? ' [FBX]' : ' [內建]'}！`);
       }
     }
 
@@ -697,10 +692,10 @@
       if (hips) hips.rotation.set(0, 0, 0);
 
       const hasActiveClip =
-        (dashTimer > 0 && fbxSlots.dodge.action) ||
-        (attackTimer > 0 && fbxSlots.attack.action) ||
-        (isMoving && fbxSlots.walk.action) ||
-        (!isMoving && fbxSlots.idle.action);
+        (lockedSlotKey === 'dodge' && fbxSlots.dodge.action) ||
+        (lockedSlotKey === 'attack' && fbxSlots.attack.action) ||
+        (!lockedSlotKey && isMoving && fbxSlots.walk.action) ||
+        (!lockedSlotKey && !isMoving && fbxSlots.idle.action);
 
       if (hasActiveClip) return;
 
@@ -735,7 +730,7 @@
     let frameCount = 0;
     let fpsTimer = 0;
 
-    setStatus('狀態：就緒（FBX 動作驅動測試中）');
+    setStatus('狀態：就緒（單次動作鎖定測試中）');
 
     function animate() {
       requestAnimationFrame(animate);
@@ -761,6 +756,7 @@
         playerRoot.position.x += forwardX * 11.5 * delta;
         playerRoot.position.z += forwardZ * 11.5 * delta;
         dashTimer = Math.max(0, dashTimer - delta);
+        if (dashTimer === 0 && lockedSlotKey === 'dodge') lockedSlotKey = null;
       } else if (isMoving) {
         playerRoot.position.x += ix * 4.8 * delta;
         playerRoot.position.z += iz * 4.8 * delta;
@@ -769,9 +765,10 @@
 
       if (attackTimer > 0) {
         attackTimer = Math.max(0, attackTimer - delta);
+        if (attackTimer === 0 && lockedSlotKey === 'attack') lockedSlotKey = null;
       }
 
-      if (dashTimer <= 0 && attackTimer <= 0) {
+      if (!lockedSlotKey) {
         if (isMoving) {
           if (!playFbxSlot('walk', 0.14)) {
             playFbxSlot('idle', 0.14);
@@ -781,9 +778,10 @@
         }
       }
 
-      slashArc.visible = attackTimer > 0 && (1 - attackTimer / ATTACK_DURATION) >= 0.2 && (1 - attackTimer / ATTACK_DURATION) <= 0.68;
+      slashArc.visible = lockedSlotKey === 'attack';
       if (slashArc.visible) {
-        const p = 1 - attackTimer / ATTACK_DURATION;
+        const total = fbxSlots.attack.duration > 0 ? Math.min(fbxSlots.attack.duration, 1.4) : DEFAULT_ATTACK_DURATION;
+        const p = 1 - attackTimer / Math.max(total, 0.01);
         slashArc.rotation.z = -0.4 + p * 1.4;
       }
 
@@ -799,4 +797,63 @@
         enemyHitFlash -= delta;
         enemyBody.material.color.setHex(0xef4444);
       } else {
-        enemyBody.material.color.setHex(0x
+        enemyBody.material.color.setHex(0x475569);
+      }
+
+      playerRoot.position.y = 0;
+      playerVisual.position.set(0, 0, 0);
+      playerVisual.rotation.set(0, 0, 0);
+
+      applyFallbackWhenNoFbx(isMoving, delta);
+      if (fbxMixer) fbxMixer.update(delta);
+      if (currentVrm) {
+        currentVrm.update(delta);
+        if (attachedToHand) {
+          const rightHand = currentVrm.humanoid?.getNormalizedBoneNode('rightHand');
+          if (rightHand && crimsonSword.parent !== rightHand) {
+            rightHand.add(crimsonSword);
+          }
+        }
+      }
+
+      const curKey = lockedSlotKey || (isMoving ? 'walk' : 'idle');
+      const labelMap = {
+        idle: fbxSlots.idle.action ? 'FBX Idle' : '內建待機',
+        walk: fbxSlots.walk.action ? 'FBX Walking' : '內建走路',
+        attack: fbxSlots.attack.action ? 'FBX Slash' : '斬擊判定',
+        dodge: fbxSlots.dodge.action ? 'FBX Dodge' : '閃避衝刺'
+      };
+      curAnimEl.textContent = labelMap[curKey] || '內建姿態';
+
+      camera.position.x += (playerRoot.position.x - camera.position.x) * 8 * delta;
+      camera.position.z += (playerRoot.position.z + 6.5 - camera.position.z) * 8 * delta;
+      camera.lookAt(playerRoot.position.x, 1.1, playerRoot.position.z);
+
+      renderer.render(scene, camera);
+
+      frameCount++;
+      fpsTimer += delta;
+      if (fpsTimer >= 1.0) {
+        const fps = Math.round(frameCount / fpsTimer);
+        fpsEl.textContent = fps;
+        fpsEl.className = fps >= 50 ? 'stat-good' : (fps >= 35 ? 'stat-warn' : 'stat-bad');
+        callsEl.textContent = renderer.info.render.calls;
+
+        if (fps < 45 && currentDpr > MIN_DPR) {
+          currentDpr = Math.max(MIN_DPR, +(currentDpr - 0.15).toFixed(2));
+          renderer.setPixelRatio(currentDpr);
+          dprEl.textContent = currentDpr.toFixed(2);
+        } else if (fps >= 56 && currentDpr < MAX_DPR) {
+          currentDpr = Math.min(MAX_DPR, +(currentDpr + 0.05).toFixed(2));
+          renderer.setPixelRatio(currentDpr);
+          dprEl.textContent = currentDpr.toFixed(2);
+        }
+
+        frameCount = 0;
+        fpsTimer = 0;
+      }
+    }
+    animate();
+  </script>
+</body>
+</html>
