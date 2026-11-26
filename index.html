@@ -3,17 +3,16 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>雲海群島 - 階段一測試（model 4.vrm）</title>
+  <title>雲海群島 - 階段一動作與按鍵測試</title>
   <style>
     * { box-sizing: border-box; user-select: none; -webkit-user-select: none; margin: 0; padding: 0; }
-    html, body { width: 100%; height: 100%; overflow: hidden; background: #1a2639; font-family: sans-serif; touch-action: none; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #000000; font-family: sans-serif; touch-action: none; }
     #canvas-container { width: 100%; height: 100%; position: relative; }
     canvas { display: block; width: 100%; height: 100%; }
 
-    /* 右上角效能監控 */
     #hud-stats {
-      position: absolute; top: 12px; right: 12px;
-      background: rgba(15, 23, 42, 0.78); color: #e2e8f0;
+      position: absolute; top: 12px; right: 12px; z-index: 10;
+      background: rgba(15, 23, 42, 0.82); color: #e2e8f0;
       padding: 8px 12px; border-radius: 8px; font-size: 12px; line-height: 1.5;
       border: 1px solid rgba(255,255,255,0.15); pointer-events: none;
     }
@@ -21,48 +20,45 @@
     .stat-warn { color: #facc15; font-weight: bold; }
     .stat-bad  { color: #f87171; font-weight: bold; }
 
-    /* 左上角載入狀態 */
     #hud-status {
-      position: absolute; top: 12px; left: 12px;
-      background: rgba(15, 23, 42, 0.78); color: #cbd5e1;
-      padding: 8px 12px; border-radius: 8px; font-size: 12px; max-width: 62vw;
-      border: 1px solid rgba(255,255,255,0.15);
+      position: absolute; top: 12px; left: 12px; z-index: 10;
+      background: rgba(15, 23, 42, 0.88); color: #cbd5e1;
+      padding: 8px 12px; border-radius: 8px; font-size: 12px; max-width: 65vw;
+      border: 1px solid rgba(255,255,255,0.15); word-break: break-word;
     }
     #vrm-upload { margin-top: 6px; font-size: 11px; color: #93c5fd; display: block; max-width: 100%; }
 
-    /* 左下角虛擬搖桿 */
     #joystick-zone {
-      position: absolute; bottom: 28px; left: 28px;
+      position: absolute; bottom: 28px; left: 28px; z-index: 10;
       width: 110px; height: 110px; border-radius: 50%;
-      background: rgba(255, 255, 255, 0.12); border: 2px solid rgba(255, 255, 255, 0.25);
+      background: rgba(255, 255, 255, 0.14); border: 2px solid rgba(255, 255, 255, 0.3);
     }
     #joystick-knob {
       position: absolute; top: 50%; left: 50%;
       width: 44px; height: 44px; margin: -22px 0 0 -22px;
-      border-radius: 50%; background: rgba(255, 255, 255, 0.65);
+      border-radius: 50%; background: rgba(255, 255, 255, 0.7);
       pointer-events: none;
     }
 
-    /* 右下角測試按鍵 */
     #action-buttons {
-      position: absolute; bottom: 28px; right: 28px;
+      position: absolute; bottom: 28px; right: 28px; z-index: 10;
       display: flex; gap: 14px; align-items: flex-end;
     }
     .btn-action {
       border-radius: 50%; border: 2px solid rgba(255,255,255,0.35);
       color: #fff; font-weight: bold; display: flex; align-items: center; justify-content: center;
-      background: rgba(30, 41, 59, 0.75);
+      background: rgba(30, 41, 59, 0.85); cursor: pointer; touch-action: manipulation;
     }
-    .btn-action:active { transform: scale(0.92); }
-    #btn-dodge { width: 62px; height: 62px; font-size: 13px; }
-    #btn-attack { width: 78px; height: 78px; font-size: 15px; background: rgba(220, 38, 38, 0.72); }
+    .btn-action:active { transform: scale(0.9); }
+    #btn-dodge { width: 64px; height: 64px; font-size: 13px; background: rgba(2, 132, 199, 0.8); }
+    #btn-attack { width: 80px; height: 80px; font-size: 15px; background: rgba(220, 38, 38, 0.82); }
   </style>
   <script type="importmap">
     {
       "imports": {
         "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
         "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/",
-        "@pixiv/three-vrm": "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3.1.5/lib/three-vrm.module.min.js"
+        "@pixiv/three-vrm": "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3.1.5/lib/three-vrm.module.js"
       }
     }
   </script>
@@ -70,38 +66,60 @@
 <body>
   <div id="canvas-container">
     <div id="hud-status">
-      <div id="status-text">狀態：正在載入 model 4.vrm...</div>
+      <div id="status-text">狀態：初始化中...</div>
       <input type="file" id="vrm-upload" accept=".vrm" />
     </div>
 
     <div id="hud-stats">
-      <div>FPS: <span id="stat-fps" class="stat-good">60</span></div>
+      <div>FPS: <span id="stat-fps" class="stat-good">--</span></div>
       <div>渲染倍率: <span id="stat-dpr">1.50</span></div>
       <div>Draw Calls: <span id="stat-calls">0</span></div>
     </div>
 
     <div id="joystick-zone"><div id="joystick-knob"></div></div>
     <div id="action-buttons">
-      <div id="btn-dodge" class="btn-action">閃避</div>
-      <div id="btn-attack" class="btn-action">斬擊</div>
+      <div id="btn-dodge" class="btn-action" role="button">閃避</div>
+      <div id="btn-attack" class="btn-action" role="button">斬擊</div>
     </div>
   </div>
 
   <script type="module">
+    const statusEl = document.getElementById('status-text');
+    function setStatus(msg, isError = false) {
+      statusEl.textContent = msg;
+      statusEl.style.color = isError ? '#fca5a5' : '#e2e8f0';
+    }
+
+    window.addEventListener('error', (event) => {
+      setStatus(`錯誤：${event.message} (${event.lineno || '?'})`, true);
+    });
+    window.addEventListener('unhandledrejection', (event) => {
+      setStatus(`非同步錯誤：${event.reason?.message || event.reason}`, true);
+    });
+
     import * as THREE from 'three';
     import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-    import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
+    import { VRMLoaderPlugin } from '@pixiv/three-vrm';
 
-    // === 1. 基礎場景與渲染器（關閉即時 shadowMap，上限 1.5） ===
     const container = document.getElementById('canvas-container');
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x87b5d6);
     scene.fog = new THREE.FogExp2(0x87b5d6, 0.018);
 
-    const camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 120);
+    const camera = new THREE.PerspectiveCamera(50, Math.max(container.clientWidth, 1) / Math.max(container.clientHeight, 1), 0.1, 120);
     camera.position.set(0, 3.2, 6.5);
 
-    const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+    const renderer = new THREE.WebGLRenderer({ antialias: false });
+    if (!renderer.getContext()) {
+      setStatus('錯誤：此瀏覽器無法建立 WebGL Context', true);
+      throw new Error('WebGL context unavailable');
+    }
+
+    renderer.domElement.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault();
+      setStatus('警告：WebGL Context 遺失', true);
+    });
+
     renderer.shadowMap.enabled = false;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     container.appendChild(renderer.domElement);
@@ -111,8 +129,8 @@
     let currentDpr = MAX_DPR;
 
     function syncRendererSize() {
-      const w = container.clientWidth;
-      const h = container.clientHeight;
+      const w = Math.max(container.clientWidth, 1);
+      const h = Math.max(container.clientHeight, 1);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
       renderer.setPixelRatio(currentDpr);
@@ -121,7 +139,6 @@
     syncRendererSize();
     window.addEventListener('resize', syncRendererSize);
 
-    // === 2. 日系明亮燈光 ===
     const hemiLight = new THREE.HemisphereLight(0xffffff, 0x6b7c93, 1.35);
     scene.add(hemiLight);
 
@@ -129,10 +146,10 @@
     dirLight.position.set(5, 10, 6);
     scene.add(dirLight);
 
-    // === 3. 浮空島測試場地與圓形假陰影 ===
-    const islandGeo = new THREE.CylinderGeometry(14, 11, 2, 24);
-    const islandMat = new THREE.MeshLambertMaterial({ color: 0x6b8e5e });
-    const island = new THREE.Mesh(islandGeo, islandMat);
+    const island = new THREE.Mesh(
+      new THREE.CylinderGeometry(14, 11, 2, 24),
+      new THREE.MeshLambertMaterial({ color: 0x6b8e5e })
+    );
     island.position.y = -1;
     scene.add(island);
 
@@ -154,6 +171,7 @@
       ctx.fillRect(0, 0, size, size);
 
       const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
       const geo = new THREE.PlaneGeometry(radius * 2, radius * 2);
       const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false });
       const mesh = new THREE.Mesh(geo, mat);
@@ -162,64 +180,88 @@
       return mesh;
     }
 
-    // === 4. 玩家角色容器（自動載入 ./model 4.vrm） ===
+    // 玩家根節點（負責水平位置與面向）＋ 姿態容器（負責擺動、翻滾、揮砍）
     const playerRoot = new THREE.Group();
     scene.add(playerRoot);
     playerRoot.add(createBlobShadow(0.6));
+
+    const playerVisual = new THREE.Group();
+    playerRoot.add(playerVisual);
+
+    // 簡易揮砍光弧特效
+    const slashArc = new THREE.Mesh(
+      new THREE.RingGeometry(0.65, 1.15, 16, 1, -Math.PI * 0.4, Math.PI * 0.8),
+      new THREE.MeshBasicMaterial({ color: 0xfef08a, side: THREE.DoubleSide, transparent: true, opacity: 0.85 })
+    );
+    slashArc.rotation.x = Math.PI / 2;
+    slashArc.position.set(0, 1.1, -0.8);
+    slashArc.visible = false;
+    playerVisual.add(slashArc);
 
     const placeholderMesh = new THREE.Mesh(
       new THREE.CapsuleGeometry(0.32, 1.0, 4, 12),
       new THREE.MeshLambertMaterial({ color: 0x38bdf8 })
     );
     placeholderMesh.position.y = 0.85;
-    playerRoot.add(placeholderMesh);
+    playerVisual.add(placeholderMesh);
 
     let currentVrm = null;
     const loader = new GLTFLoader();
     loader.register((parser) => new VRMLoaderPlugin(parser));
 
+    function disposeObject3D(obj) {
+      obj.traverse((node) => {
+        if (node.geometry) node.geometry.dispose();
+        if (node.material) {
+          const mats = Array.isArray(node.material) ? node.material : [node.material];
+          mats.forEach((m) => {
+            for (const key in m) {
+              if (m[key] && m[key].isTexture) m[key].dispose();
+            }
+            m.dispose();
+          });
+        }
+      });
+    }
+
     function loadVRMFromUrl(url, label = 'model 4.vrm') {
-      document.getElementById('status-text').textContent = `狀態：正在載入 ${label}...`;
+      setStatus(`狀態：正在載入 ${label}...`);
       loader.load(
         url,
         (gltf) => {
           const vrm = gltf.userData.vrm;
-          if (!vrm) return;
-
-          if (currentVrm) {
-            playerRoot.remove(currentVrm.scene);
-            VRMUtils.deepDispose(currentVrm.scene);
-          } else if (placeholderMesh.parent) {
-            playerRoot.remove(placeholderMesh);
+          if (!vrm) {
+            setStatus(`狀態：${label} 缺少 VRM 資料`);
+            return;
           }
-
-          VRMUtils.removeUnnecessaryVertices(gltf.scene);
-          VRMUtils.removeUnnecessaryJoints(gltf.scene);
-
+          if (currentVrm) {
+            playerVisual.remove(currentVrm.scene);
+            disposeObject3D(currentVrm.scene);
+          } else if (placeholderMesh.parent) {
+            playerVisual.remove(placeholderMesh);
+          }
           vrm.scene.rotation.y = Math.PI;
-          playerRoot.add(vrm.scene);
+          playerVisual.add(vrm.scene);
           currentVrm = vrm;
-          document.getElementById('status-text').textContent = `狀態：${label} 已載入`;
+          setStatus(`狀態：${label} 已載入`);
         },
         undefined,
         (err) => {
           console.error(err);
-          document.getElementById('status-text').textContent = `狀態：找不到 ${label}，可手動選檔`;
+          setStatus(`載入 ${label} 失敗：${err?.message || '請確認路徑'}`, true);
         }
       );
     }
 
-    // 預設自動載入同目錄下的 model 4.vrm
     loadVRMFromUrl('./model%204.vrm', 'model 4.vrm');
 
     document.getElementById('vrm-upload').addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      const url = URL.createObjectURL(file);
-      loadVRMFromUrl(url, file.name);
+      loadVRMFromUrl(URL.createObjectURL(file), file.name);
     });
 
-    // === 5. 輕量測試怪（含可破壞弱點部件） ===
+    // 測試怪與可破壞部位
     const enemyRoot = new THREE.Group();
     enemyRoot.position.set(0, 0, -4.5);
     scene.add(enemyRoot);
@@ -240,7 +282,7 @@
     let hornHp = 3;
     let enemyHitFlash = 0;
 
-    // === 6. 虛擬搖桿與測試按鍵控制 ===
+    // 搖桿控制
     const moveInput = { x: 0, z: 0 };
     const joyZone = document.getElementById('joystick-zone');
     const joyKnob = document.getElementById('joystick-knob');
@@ -285,6 +327,55 @@
       moveInput.z = dy / maxR;
     }
 
+    // 斬擊與閃避狀態
+    const DASH_DURATION = 0.28;
+    const ATTACK_DURATION = 0.32;
+    let dashTimer = 0;
+    let attackTimer = 0;
+    let walkPhase = 0;
+
+    function triggerDodge() {
+      if (dashTimer > 0) return;
+      dashTimer = DASH_DURATION;
+      setStatus('狀態：發動閃避衝刺！');
+    }
+
+    function triggerAttack() {
+      if (attackTimer > 0) return;
+      attackTimer = ATTACK_DURATION;
+
+      // 往前做一點突進位移
+      const forwardX = -Math.sin(playerRoot.rotation.y);
+      const forwardZ = -Math.cos(playerRoot.rotation.y);
+      playerRoot.position.x += forwardX * 0.45;
+      playerRoot.position.z += forwardZ * 0.45;
+
+      const dist = playerRoot.position.distanceTo(enemyRoot.position);
+      if (dist < 3.2) {
+        enemyHitFlash = 0.18;
+        if (hornHp > 0) {
+          hornHp--;
+          if (hornHp === 0) {
+            enemyRoot.remove(enemyHorn);
+            enemyHorn.geometry.dispose();
+            hornMat.dispose();
+            setStatus('狀態：斬擊命中！角晶已破壞');
+          } else {
+            setStatus(`狀態：斬擊命中！角晶剩餘 ${hornHp} 次`);
+          }
+        } else {
+          setStatus('狀態：斬擊命中測試怪！');
+        }
+      } else {
+        setStatus('狀態：發動斬擊！');
+      }
+    }
+
+    const btnDodge = document.getElementById('btn-dodge');
+    const btnAttack = document.getElementById('btn-attack');
+    btnDodge.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); triggerDodge(); });
+    btnAttack.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); triggerAttack(); });
+
     const keys = {};
     window.addEventListener('keydown', (e) => {
       keys[e.code] = true;
@@ -293,34 +384,67 @@
     });
     window.addEventListener('keyup', (e) => { keys[e.code] = false; });
 
-    let dashTimer = 0;
-    let attackTimer = 0;
+    function applyProceduralPose(isMoving) {
+      // 重置姿態
+      playerVisual.position.set(0, 0, 0);
+      playerVisual.rotation.set(0, 0, 0);
+      slashArc.visible = false;
 
-    function triggerDodge() {
-      if (dashTimer <= 0) dashTimer = 0.22;
-    }
-    function triggerAttack() {
-      if (attackTimer > 0) return;
-      attackTimer = 0.28;
-      const dist = playerRoot.position.distanceTo(enemyRoot.position);
-      if (dist < 2.6) {
-        enemyHitFlash = 0.15;
-        if (hornHp > 0) {
-          hornHp--;
-          if (hornHp === 0) {
-            enemyRoot.remove(enemyHorn);
-            enemyHorn.geometry.dispose();
-            hornMat.dispose();
-            document.getElementById('status-text').textContent = '狀態：部位破壞達成！角晶已摧毀';
+      // 走路擺動
+      if (isMoving && dashTimer <= 0 && attackTimer <= 0) {
+        playerVisual.position.y = Math.abs(Math.sin(walkPhase)) * 0.08;
+        playerVisual.rotation.z = Math.sin(walkPhase) * 0.06;
+        playerVisual.rotation.x = -0.06;
+      }
+
+      // 閃避前傾翻滾
+      if (dashTimer > 0) {
+        const progress = 1 - dashTimer / DASH_DURATION;
+        playerVisual.position.y = Math.sin(progress * Math.PI) * 0.35;
+        playerVisual.rotation.x = -progress * Math.PI * 2;
+      }
+
+      // 斬擊揮砍扭轉與光弧
+      if (attackTimer > 0) {
+        const progress = 1 - attackTimer / ATTACK_DURATION;
+        playerVisual.rotation.y = (progress - 0.5) * 1.4;
+        playerVisual.rotation.x = -0.22;
+        slashArc.visible = progress < 0.75;
+        slashArc.rotation.z = (progress - 0.3) * 1.8;
+      }
+
+      // 若有 VRM 骨架，同步手臂與身體關節擺動
+      if (currentVrm && currentVrm.humanoid) {
+        const leftArm = currentVrm.humanoid.getNormalizedBoneNode('leftUpperArm');
+        const rightArm = currentVrm.humanoid.getNormalizedBoneNode('rightUpperArm');
+        const spine = currentVrm.humanoid.getNormalizedBoneNode('spine');
+
+        if (leftArm && rightArm) {
+          if (attackTimer > 0) {
+            const p = 1 - attackTimer / ATTACK_DURATION;
+            rightArm.rotation.z = -1.1;
+            rightArm.rotation.x = -1.2 + p * 2.2;
+            leftArm.rotation.z = 0.5;
+          } else if (dashTimer > 0) {
+            rightArm.rotation.z = -0.7;
+            leftArm.rotation.z = 0.7;
+          } else if (isMoving) {
+            const swing = Math.sin(walkPhase) * 0.45;
+            leftArm.rotation.x = swing;
+            rightArm.rotation.x = -swing;
+            leftArm.rotation.z = 0.25;
+            rightArm.rotation.z = -0.25;
+          } else {
+            leftArm.rotation.set(0, 0, 0.25);
+            rightArm.rotation.set(0, 0, -0.25);
           }
+        }
+        if (spine) {
+          spine.rotation.y = attackTimer > 0 ? Math.sin((1 - attackTimer / ATTACK_DURATION) * Math.PI) * 0.35 : 0;
         }
       }
     }
 
-    document.getElementById('btn-dodge').addEventListener('touchstart', (e) => { e.preventDefault(); triggerDodge(); });
-    document.getElementById('btn-attack').addEventListener('touchstart', (e) => { e.preventDefault(); triggerAttack(); });
-
-    // === 7. 主迴圈與即時幀率動態解析度調整 ===
     const clock = new THREE.Clock();
     const fpsEl = document.getElementById('stat-fps');
     const dprEl = document.getElementById('stat-dpr');
@@ -328,6 +452,8 @@
 
     let frameCount = 0;
     let fpsTimer = 0;
+
+    setStatus('狀態：就緒（可移動、閃避、斬擊）');
 
     function animate() {
       requestAnimationFrame(animate);
@@ -338,14 +464,27 @@
       const len = Math.hypot(ix, iz);
       if (len > 1) { ix /= len; iz /= len; }
 
-      const speed = dashTimer > 0 ? 12.5 : 4.8;
-      if (dashTimer > 0) dashTimer -= delta;
-      if (attackTimer > 0) attackTimer -= delta;
+      const isMoving = len > 0.05;
+      if (isMoving) {
+        walkPhase += delta * 11;
+      } else {
+        walkPhase = 0;
+      }
 
-      if (len > 0.05) {
-        playerRoot.position.x += ix * speed * delta;
-        playerRoot.position.z += iz * speed * delta;
+      if (dashTimer > 0) {
+        const forwardX = -Math.sin(playerRoot.rotation.y);
+        const forwardZ = -Math.cos(playerRoot.rotation.y);
+        playerRoot.position.x += forwardX * 11.5 * delta;
+        playerRoot.position.z += forwardZ * 11.5 * delta;
+        dashTimer = Math.max(0, dashTimer - delta);
+      } else if (isMoving) {
+        playerRoot.position.x += ix * 4.8 * delta;
+        playerRoot.position.z += iz * 4.8 * delta;
         playerRoot.rotation.y = Math.atan2(-ix, -iz);
+      }
+
+      if (attackTimer > 0) {
+        attackTimer = Math.max(0, attackTimer - delta);
       }
 
       const distFromCenter = Math.hypot(playerRoot.position.x, playerRoot.position.z);
@@ -363,6 +502,7 @@
         enemyBody.material.color.setHex(0x475569);
       }
 
+      applyProceduralPose(isMoving);
       if (currentVrm) currentVrm.update(delta);
 
       camera.position.x += (playerRoot.position.x - camera.position.x) * 8 * delta;
