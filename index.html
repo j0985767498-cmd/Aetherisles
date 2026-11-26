@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>雲海群島 - 階段一動作與按鍵測試</title>
+  <title>雲海群島 - 階段一動作與晶刃大劍測試</title>
   <style>
     * { box-sizing: border-box; user-select: none; -webkit-user-select: none; margin: 0; padding: 0; }
     html, body { width: 100%; height: 100%; overflow: hidden; background: #000000; font-family: sans-serif; touch-action: none; }
@@ -180,21 +180,97 @@
       return mesh;
     }
 
-    // 玩家根節點（負責水平位置與面向）＋ 姿態容器（負責擺動、翻滾、揮砍）
+    // === 建立右下角範例風格的「緋紅晶刃巨劍」（已放大加長） ===
+    function createCrimsonCrystalSword() {
+      const sword = new THREE.Group();
+
+      const goldMat = new THREE.MeshLambertMaterial({ color: 0xeab308 });
+      const crimsonWrapMat = new THREE.MeshLambertMaterial({ color: 0x991b1b });
+      const gemMat = new THREE.MeshLambertMaterial({
+        color: 0xef4444,
+        emissive: 0x7f1d1d,
+        emissiveIntensity: 0.45
+      });
+      const emeraldMat = new THREE.MeshLambertMaterial({ color: 0x10b981 });
+
+      // 握柄（較長）
+      const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.04, 0.34, 8), crimsonWrapMat);
+      grip.position.y = 0.14;
+      sword.add(grip);
+
+      // 劍首紅晶尖錐
+      const pommel = new THREE.Mesh(new THREE.ConeGeometry(0.065, 0.18, 4), gemMat);
+      pommel.rotation.x = Math.PI;
+      pommel.position.y = -0.1;
+      sword.add(pommel);
+
+      // 華麗皇冠式護手底座與中央紅寶石
+      const guardBase = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.08, 0.12), goldMat);
+      guardBase.position.y = 0.32;
+      sword.add(guardBase);
+
+      const centerGem = new THREE.Mesh(new THREE.OctahedronGeometry(0.085, 0), gemMat);
+      centerGem.scale.set(1.1, 1.3, 0.55);
+      centerGem.position.set(0, 0.35, 0.05);
+      sword.add(centerGem);
+
+      // 護手兩側彎角與翡翠點綴
+      for (const side of [-1, 1]) {
+        const horn = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.28, 5), goldMat);
+        horn.position.set(side * 0.22, 0.38, 0);
+        horn.rotation.z = -side * 0.65;
+        sword.add(horn);
+
+        const accent = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.05, 0.08), emeraldMat);
+        accent.position.set(side * 0.14, 0.28, 0.02);
+        sword.add(accent);
+      }
+
+      // 雙側分裂式緋紅晶刃（拉長放大，含外框與浮游晶石）
+      for (const side of [-1, 1]) {
+        const frame = new THREE.Mesh(new THREE.BoxGeometry(0.055, 1.15, 0.035), goldMat);
+        frame.position.set(side * 0.11, 0.94, 0);
+        frame.rotation.z = -side * 0.045;
+        sword.add(frame);
+
+        // 分段紅晶刃片
+        for (let i = 0; i < 3; i++) {
+          const shard = new THREE.Mesh(new THREE.ConeGeometry(0.068 - i * 0.012, 0.34, 4), gemMat);
+          shard.scale.set(1.15, 1, 0.45);
+          shard.position.set(side * (0.11 + i * 0.012), 0.58 + i * 0.31, 0);
+          shard.rotation.z = -side * 0.05;
+          sword.add(shard);
+        }
+
+        // 外側懸浮晶石碎片
+        const floatShard = new THREE.Mesh(new THREE.OctahedronGeometry(0.045, 0), gemMat);
+        floatShard.position.set(side * 0.21, 0.82, 0);
+        sword.add(floatShard);
+      }
+
+      sword.scale.setScalar(1.25);
+      return sword;
+    }
+
     const playerRoot = new THREE.Group();
     scene.add(playerRoot);
-    playerRoot.add(createBlobShadow(0.6));
+    playerRoot.add(createBlobShadow(0.65));
 
     const playerVisual = new THREE.Group();
     playerRoot.add(playerVisual);
 
-    // 簡易揮砍光弧特效
+    const crimsonSword = createCrimsonCrystalSword();
+    // 預設掛在角色右手側斜握
+    crimsonSword.position.set(-0.48, 0.95, -0.12);
+    crimsonSword.rotation.set(0.45, 0, -0.35);
+    playerVisual.add(crimsonSword);
+
     const slashArc = new THREE.Mesh(
-      new THREE.RingGeometry(0.65, 1.15, 16, 1, -Math.PI * 0.4, Math.PI * 0.8),
-      new THREE.MeshBasicMaterial({ color: 0xfef08a, side: THREE.DoubleSide, transparent: true, opacity: 0.85 })
+      new THREE.RingGeometry(0.85, 1.45, 18, 1, -Math.PI * 0.45, Math.PI * 0.9),
+      new THREE.MeshBasicMaterial({ color: 0xfca5a5, side: THREE.DoubleSide, transparent: true, opacity: 0.85 })
     );
     slashArc.rotation.x = Math.PI / 2;
-    slashArc.position.set(0, 1.1, -0.8);
+    slashArc.position.set(0, 1.2, -1.0);
     slashArc.visible = false;
     playerVisual.add(slashArc);
 
@@ -243,7 +319,7 @@
           vrm.scene.rotation.y = Math.PI;
           playerVisual.add(vrm.scene);
           currentVrm = vrm;
-          setStatus(`狀態：${label} 已載入`);
+          setStatus(`狀態：${label} 已載入（緋紅晶刃大劍已裝備）`);
         },
         undefined,
         (err) => {
@@ -327,12 +403,12 @@
       moveInput.z = dy / maxR;
     }
 
-    // 斬擊與閃避狀態
     const DASH_DURATION = 0.28;
-    const ATTACK_DURATION = 0.32;
+    const ATTACK_DURATION = 0.36;
     let dashTimer = 0;
     let attackTimer = 0;
     let walkPhase = 0;
+    let idlePhase = 0;
 
     function triggerDodge() {
       if (dashTimer > 0) return;
@@ -344,14 +420,13 @@
       if (attackTimer > 0) return;
       attackTimer = ATTACK_DURATION;
 
-      // 往前做一點突進位移
       const forwardX = -Math.sin(playerRoot.rotation.y);
       const forwardZ = -Math.cos(playerRoot.rotation.y);
       playerRoot.position.x += forwardX * 0.45;
       playerRoot.position.z += forwardZ * 0.45;
 
       const dist = playerRoot.position.distanceTo(enemyRoot.position);
-      if (dist < 3.2) {
+      if (dist < 3.6) {
         enemyHitFlash = 0.18;
         if (hornHp > 0) {
           hornHp--;
@@ -359,15 +434,15 @@
             enemyRoot.remove(enemyHorn);
             enemyHorn.geometry.dispose();
             hornMat.dispose();
-            setStatus('狀態：斬擊命中！角晶已破壞');
+            setStatus('狀態：晶刃斬擊命中！角晶已破壞');
           } else {
-            setStatus(`狀態：斬擊命中！角晶剩餘 ${hornHp} 次`);
+            setStatus(`狀態：晶刃斬擊命中！角晶剩餘 ${hornHp} 次`);
           }
         } else {
-          setStatus('狀態：斬擊命中測試怪！');
+          setStatus('狀態：晶刃斬擊命中測試怪！');
         }
       } else {
-        setStatus('狀態：發動斬擊！');
+        setStatus('狀態：揮舞緋紅晶刃大劍！');
       }
     }
 
@@ -384,63 +459,124 @@
     });
     window.addEventListener('keyup', (e) => { keys[e.code] = false; });
 
-    function applyProceduralPose(isMoving) {
-      // 重置姿態
+    function resetBone(bone) {
+      if (bone) bone.rotation.set(0, 0, 0);
+    }
+
+    function applyHumanPose(isMoving) {
       playerVisual.position.set(0, 0, 0);
       playerVisual.rotation.set(0, 0, 0);
       slashArc.visible = false;
 
-      // 走路擺動
-      if (isMoving && dashTimer <= 0 && attackTimer <= 0) {
-        playerVisual.position.y = Math.abs(Math.sin(walkPhase)) * 0.08;
-        playerVisual.rotation.z = Math.sin(walkPhase) * 0.06;
-        playerVisual.rotation.x = -0.06;
-      }
+      // 預設自然垂臂持劍位置
+      crimsonSword.position.set(-0.48, 0.92, -0.12);
+      crimsonSword.rotation.set(0.45, 0, -0.35);
 
-      // 閃避前傾翻滾
+      const breathe = Math.sin(idlePhase) * 0.02;
+
       if (dashTimer > 0) {
-        const progress = 1 - dashTimer / DASH_DURATION;
-        playerVisual.position.y = Math.sin(progress * Math.PI) * 0.35;
-        playerVisual.rotation.x = -progress * Math.PI * 2;
+        const p = 1 - dashTimer / DASH_DURATION;
+        playerVisual.position.y = Math.sin(p * Math.PI) * 0.22;
+        playerVisual.rotation.x = -0.35;
+        crimsonSword.position.set(-0.42, 0.85, 0.15);
+        crimsonSword.rotation.set(1.15, 0, -0.2);
+      } else if (attackTimer > 0) {
+        const p = 1 - attackTimer / ATTACK_DURATION;
+        // 揮砍時身體自然轉腰並向前下劈
+        playerVisual.rotation.y = (0.45 - p) * 1.1;
+        playerVisual.rotation.x = -0.18;
+
+        crimsonSword.position.set(-0.22, 1.35 - p * 0.45, -0.55);
+        crimsonSword.rotation.set(-1.35 + p * 2.45, 0, -0.55 + p * 1.1);
+
+        slashArc.visible = p < 0.75;
+        slashArc.rotation.z = (p - 0.35) * 1.9;
+      } else if (isMoving) {
+        // 走路時重心自然上下微幅起伏，不做左右誇張搖晃
+        playerVisual.position.y = Math.abs(Math.sin(walkPhase)) * 0.055;
+        playerVisual.rotation.x = -0.07;
+        crimsonSword.position.set(-0.48, 0.92 + Math.abs(Math.sin(walkPhase)) * 0.04, -0.12);
+        crimsonSword.rotation.set(0.45 + Math.sin(walkPhase) * 0.22, 0, -0.35);
+      } else {
+        playerVisual.position.y = breathe * 0.4;
       }
 
-      // 斬擊揮砍扭轉與光弧
-      if (attackTimer > 0) {
-        const progress = 1 - attackTimer / ATTACK_DURATION;
-        playerVisual.rotation.y = (progress - 0.5) * 1.4;
-        playerVisual.rotation.x = -0.22;
-        slashArc.visible = progress < 0.75;
-        slashArc.rotation.z = (progress - 0.3) * 1.8;
-      }
-
-      // 若有 VRM 骨架，同步手臂與身體關節擺動
       if (currentVrm && currentVrm.humanoid) {
-        const leftArm = currentVrm.humanoid.getNormalizedBoneNode('leftUpperArm');
-        const rightArm = currentVrm.humanoid.getNormalizedBoneNode('rightUpperArm');
-        const spine = currentVrm.humanoid.getNormalizedBoneNode('spine');
+        const h = currentVrm.humanoid;
+        const spine = h.getNormalizedBoneNode('spine');
+        const chest = h.getNormalizedBoneNode('chest');
+        const lArm = h.getNormalizedBoneNode('leftUpperArm');
+        const rArm = h.getNormalizedBoneNode('rightUpperArm');
+        const lForearm = h.getNormalizedBoneNode('leftLowerArm');
+        const rForearm = h.getNormalizedBoneNode('rightLowerArm');
+        const lLeg = h.getNormalizedBoneNode('leftUpperLeg');
+        const rLeg = h.getNormalizedBoneNode('rightUpperLeg');
+        const lKnee = h.getNormalizedBoneNode('leftLowerLeg');
+        const rKnee = h.getNormalizedBoneNode('rightLowerLeg');
 
-        if (leftArm && rightArm) {
-          if (attackTimer > 0) {
-            const p = 1 - attackTimer / ATTACK_DURATION;
-            rightArm.rotation.z = -1.1;
-            rightArm.rotation.x = -1.2 + p * 2.2;
-            leftArm.rotation.z = 0.5;
-          } else if (dashTimer > 0) {
-            rightArm.rotation.z = -0.7;
-            leftArm.rotation.z = 0.7;
-          } else if (isMoving) {
-            const swing = Math.sin(walkPhase) * 0.45;
-            leftArm.rotation.x = swing;
-            rightArm.rotation.x = -swing;
-            leftArm.rotation.z = 0.25;
-            rightArm.rotation.z = -0.25;
-          } else {
-            leftArm.rotation.set(0, 0, 0.25);
-            rightArm.rotation.set(0, 0, -0.25);
+        [spine, chest, lArm, rArm, lForearm, rForearm, lLeg, rLeg, lKnee, rKnee].forEach(resetBone);
+
+        if (attackTimer > 0) {
+          const p = 1 - attackTimer / ATTACK_DURATION;
+          if (spine) spine.rotation.y = (0.4 - p) * 0.65;
+          // 右手舉劍往前揮砍
+          if (rArm) {
+            rArm.rotation.z = -0.45;
+            rArm.rotation.x = -1.35 + p * 2.3;
           }
-        }
-        if (spine) {
-          spine.rotation.y = attackTimer > 0 ? Math.sin((1 - attackTimer / ATTACK_DURATION) * Math.PI) * 0.35 : 0;
+          if (rForearm) {
+            rForearm.rotation.x = -0.35;
+          }
+          // 左手自然平衡
+          if (lArm) {
+            lArm.rotation.z = 0.35;
+            lArm.rotation.x = 0.25;
+          }
+          if (lLeg) lLeg.rotation.x = 0.25;
+          if (rLeg) rLeg.rotation.x = -0.25;
+        } else if (dashTimer > 0) {
+          if (spine) spine.rotation.x = 0.28;
+          if (lArm) { lArm.rotation.z = 0.3; lArm.rotation.x = 0.45; }
+          if (rArm) { rArm.rotation.z = -0.3; rArm.rotation.x = 0.45; }
+          if (lLeg) { lLeg.rotation.x = -0.55; }
+          if (rLeg) { rLeg.rotation.x = 0.45; }
+          if (lKnee) { lKnee.rotation.x = 0.65; }
+          if (rKnee) { rKnee.rotation.x = 0.35; }
+        } else if (isMoving) {
+          const step = Math.sin(walkPhase);
+          const stepCos = Math.cos(walkPhase);
+
+          // 雙腿前後交替踏步 + 膝蓋彎曲
+          if (lLeg) lLeg.rotation.x = -step * 0.62;
+          if (rLeg) rLeg.rotation.x = step * 0.62;
+          if (lKnee) lKnee.rotation.x = Math.max(0, -stepCos) * 0.55;
+          if (rKnee) rKnee.rotation.x = Math.max(0, stepCos) * 0.55;
+
+          // 手臂自然擺動（不平舉，保持自然下垂微擺）
+          if (lArm) {
+            lArm.rotation.z = 0.16;
+            lArm.rotation.x = step * 0.35;
+          }
+          if (rArm) {
+            rArm.rotation.z = -0.18;
+            rArm.rotation.x = -step * 0.35;
+          }
+          if (spine) {
+            spine.rotation.x = 0.06;
+            spine.rotation.y = -step * 0.08;
+          }
+        } else {
+          // 待機：自然垂臂＋輕微呼吸，不平舉
+          if (lArm) {
+            lArm.rotation.z = 0.14;
+            lArm.rotation.x = breathe * 0.5;
+          }
+          if (rArm) {
+            rArm.rotation.z = -0.16;
+            rArm.rotation.x = -breathe * 0.5;
+          }
+          if (lForearm) lForearm.rotation.x = -0.12;
+          if (rForearm) rForearm.rotation.x = -0.18;
         }
       }
     }
@@ -453,11 +589,12 @@
     let frameCount = 0;
     let fpsTimer = 0;
 
-    setStatus('狀態：就緒（可移動、閃避、斬擊）');
+    setStatus('狀態：就緒（自然步態＋緋紅晶刃大劍）');
 
     function animate() {
       requestAnimationFrame(animate);
       const delta = Math.min(clock.getDelta(), 0.05);
+      idlePhase += delta * 2.2;
 
       let ix = moveInput.x + (keys['KeyD'] ? 1 : 0) - (keys['KeyA'] ? 1 : 0);
       let iz = moveInput.z + (keys['KeyS'] ? 1 : 0) - (keys['KeyW'] ? 1 : 0);
@@ -466,7 +603,7 @@
 
       const isMoving = len > 0.05;
       if (isMoving) {
-        walkPhase += delta * 11;
+        walkPhase += delta * 10.5;
       } else {
         walkPhase = 0;
       }
@@ -502,7 +639,7 @@
         enemyBody.material.color.setHex(0x475569);
       }
 
-      applyProceduralPose(isMoving);
+      applyHumanPose(isMoving);
       if (currentVrm) currentVrm.update(delta);
 
       camera.position.x += (playerRoot.position.x - camera.position.x) * 8 * delta;
