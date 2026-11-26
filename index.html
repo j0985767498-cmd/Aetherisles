@@ -3,57 +3,19 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>雲海群島 - 階段一骨架防翻轉與流暢動作修正</title>
+  <title>雲海群島 - 骨架對折診斷版</title>
   <style>
-    * { box-sizing: border-box; user-select: none; -webkit-user-select: none; margin: 0; padding: 0; }
-    html, body { width: 100%; height: 100%; overflow: hidden; background: #000000; font-family: sans-serif; touch-action: none; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #111827; font-family: monospace; }
     #canvas-container { width: 100%; height: 100%; position: relative; }
     canvas { display: block; width: 100%; height: 100%; }
-
-    #hud-stats {
-      position: absolute; top: 12px; right: 12px; z-index: 10;
-      background: rgba(15, 23, 42, 0.82); color: #e2e8f0;
-      padding: 8px 12px; border-radius: 8px; font-size: 12px; line-height: 1.5;
-      border: 1px solid rgba(255,255,255,0.15); pointer-events: none;
-    }
-    .stat-good { color: #4ade80; font-weight: bold; }
-    .stat-warn { color: #facc15; font-weight: bold; }
-    .stat-bad  { color: #f87171; font-weight: bold; }
-
-    #hud-status {
+    #diag {
       position: absolute; top: 12px; left: 12px; z-index: 10;
-      background: rgba(15, 23, 42, 0.88); color: #cbd5e1;
-      padding: 8px 12px; border-radius: 8px; font-size: 12px; max-width: 72vw;
-      border: 1px solid rgba(255,255,255,0.15); word-break: break-word;
+      background: rgba(15, 23, 42, 0.92); color: #e2e8f0;
+      padding: 10px 12px; border-radius: 8px; font-size: 12px; line-height: 1.5;
+      border: 1px solid rgba(255,255,255,0.2); max-width: 85vw; white-space: pre-wrap;
     }
-    .file-row { margin-top: 6px; font-size: 11px; color: #93c5fd; }
-    .file-row label { display: block; margin-bottom: 2px; color: #cbd5e1; }
-    .file-row input { display: block; max-width: 100%; font-size: 11px; color: #93c5fd; }
-
-    #joystick-zone {
-      position: absolute; bottom: 28px; left: 28px; z-index: 10;
-      width: 110px; height: 110px; border-radius: 50%;
-      background: rgba(255, 255, 255, 0.14); border: 2px solid rgba(255, 255, 255, 0.3);
-    }
-    #joystick-knob {
-      position: absolute; top: 50%; left: 50%;
-      width: 44px; height: 44px; margin: -22px 0 0 -22px;
-      border-radius: 50%; background: rgba(255, 255, 255, 0.7);
-      pointer-events: none;
-    }
-
-    #action-buttons {
-      position: absolute; bottom: 28px; right: 28px; z-index: 10;
-      display: flex; gap: 14px; align-items: flex-end;
-    }
-    .btn-action {
-      border-radius: 50%; border: 2px solid rgba(255,255,255,0.35);
-      color: #fff; font-weight: bold; display: flex; align-items: center; justify-content: center;
-      background: rgba(30, 41, 59, 0.85); cursor: pointer; touch-action: manipulation;
-    }
-    .btn-action:active { transform: scale(0.9); }
-    #btn-dodge { width: 64px; height: 64px; font-size: 13px; background: rgba(2, 132, 199, 0.8); }
-    #btn-attack { width: 80px; height: 80px; font-size: 15px; background: rgba(220, 38, 38, 0.82); }
+    input[type="file"] { margin-top: 6px; font-size: 11px; color: #93c5fd; }
   </style>
   <script type="importmap">
     {
@@ -67,626 +29,87 @@
 </head>
 <body>
   <div id="canvas-container">
-    <div id="hud-status">
-      <div id="status-text">狀態：初始化中...</div>
-      <div class="file-row">
-        <label for="vrm-upload">VRM 角色檔：</label>
-        <input type="file" id="vrm-upload" accept=".vrm" />
-      </div>
-    </div>
-
-    <div id="hud-stats">
-      <div>FPS: <span id="stat-fps" class="stat-good">--</span></div>
-      <div>渲染倍率: <span id="stat-dpr">1.50</span></div>
-      <div>Draw Calls: <span id="stat-calls">0</span></div>
-      <div>姿態保護: <span class="stat-good">已啟用</span></div>
-    </div>
-
-    <div id="joystick-zone"><div id="joystick-knob"></div></div>
-    <div id="action-buttons">
-      <div id="btn-dodge" class="btn-action" role="button">閃避</div>
-      <div id="btn-attack" class="btn-action" role="button">斬擊</div>
+    <div id="diag">
+      <div id="diag-text">正在載入模型...</div>
+      <input type="file" id="vrm-upload" accept=".vrm" />
     </div>
   </div>
 
   <script type="module">
-    const statusEl = document.getElementById('status-text');
-    function setStatus(msg, isError = false) {
-      statusEl.textContent = msg;
-      statusEl.style.color = isError ? '#fca5a5' : '#e2e8f0';
-    }
-
-    window.addEventListener('error', (event) => {
-      setStatus(`錯誤：${event.message} (${event.lineno || '?'})`, true);
-    });
-    window.addEventListener('unhandledrejection', (event) => {
-      setStatus(`非同步錯誤：${event.reason?.message || event.reason}`, true);
-    });
-
     import * as THREE from 'three';
     import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
     import { VRMLoaderPlugin } from '@pixiv/three-vrm';
 
+    const diagEl = document.getElementById('diag-text');
     const container = document.getElementById('canvas-container');
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x87b5d6);
-    scene.fog = new THREE.FogExp2(0x87b5d6, 0.018);
+    scene.background = new THREE.Color(0x64748b);
 
-    const camera = new THREE.PerspectiveCamera(50, Math.max(container.clientWidth, 1) / Math.max(container.clientHeight, 1), 0.1, 120);
-    camera.position.set(0, 3.2, 6.5);
+    const camera = new THREE.PerspectiveCamera(45, container.clientWidth / Math.max(container.clientHeight, 1), 0.1, 100);
+    camera.position.set(0, 1.3, 3.4);
+    camera.lookAt(0, 1.0, 0);
 
-    const renderer = new THREE.WebGLRenderer({ antialias: false });
-    if (!renderer.getContext()) {
-      setStatus('錯誤：此瀏覽器無法建立 WebGL Context', true);
-      throw new Error('WebGL context unavailable');
-    }
-
-    renderer.domElement.addEventListener('webglcontextlost', (e) => {
-      e.preventDefault();
-      setStatus('警告：WebGL Context 遺失', true);
-    });
-
-    renderer.shadowMap.enabled = false;
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+    renderer.setSize(container.clientWidth, container.clientHeight);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     container.appendChild(renderer.domElement);
 
-    const MAX_DPR = Math.min(window.devicePixelRatio || 1, 1.5);
-    const MIN_DPR = 0.85;
-    let currentDpr = MAX_DPR;
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x475569, 1.5));
+    const dir = new THREE.DirectionalLight(0xffffff, 2.0);
+    dir.position.set(3, 5, 4);
+    scene.add(dir);
 
-    function syncRendererSize() {
-      const w = Math.max(container.clientWidth, 1);
-      const h = Math.max(container.clientHeight, 1);
-      camera.aspect = w / h;
-      camera.updateProjectionMatrix();
-      renderer.setPixelRatio(currentDpr);
-      renderer.setSize(w, h, false);
-    }
-    syncRendererSize();
-    window.addEventListener('resize', syncRendererSize);
+    const grid = new THREE.GridHelper(10, 10);
+    scene.add(grid);
 
-    const hemiLight = new THREE.HemisphereLight(0xffffff, 0x6b7c93, 1.35);
-    scene.add(hemiLight);
-
-    const dirLight = new THREE.DirectionalLight(0xfff6e5, 2.2);
-    dirLight.position.set(5, 10, 6);
-    scene.add(dirLight);
-
-    const island = new THREE.Mesh(
-      new THREE.CylinderGeometry(14, 11, 2, 24),
-      new THREE.MeshLambertMaterial({ color: 0x6b8e5e })
-    );
-    island.position.y = -1;
-    scene.add(island);
-
-    const gridHelper = new THREE.GridHelper(26, 26, 0xffffff, 0x4b6842);
-    gridHelper.position.y = 0.01;
-    gridHelper.material.opacity = 0.25;
-    gridHelper.material.transparent = true;
-    scene.add(gridHelper);
-
-    function createBlobShadow(radius = 0.65) {
-      const size = 64;
-      const canvas = document.createElement('canvas');
-      canvas.width = size; canvas.height = size;
-      const ctx = canvas.getContext('2d');
-      const grad = ctx.createRadialGradient(size / 2, size / 2, 2, size / 2, size / 2, size / 2);
-      grad.addColorStop(0, 'rgba(0, 0, 0, 0.48)');
-      grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, size, size);
-
-      const tex = new THREE.CanvasTexture(canvas);
-      tex.colorSpace = THREE.SRGBColorSpace;
-      const geo = new THREE.PlaneGeometry(radius * 2, radius * 2);
-      const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false });
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.rotation.x = -Math.PI / 2;
-      mesh.position.y = 0.02;
-      return mesh;
-    }
-
-    function createCrimsonCrystalSword() {
-      const sword = new THREE.Group();
-      const goldMat = new THREE.MeshLambertMaterial({ color: 0xeab308 });
-      const crimsonWrapMat = new THREE.MeshLambertMaterial({ color: 0x991b1b });
-      const gemMat = new THREE.MeshLambertMaterial({
-        color: 0xef4444,
-        emissive: 0x7f1d1d,
-        emissiveIntensity: 0.45
-      });
-      const emeraldMat = new THREE.MeshLambertMaterial({ color: 0x10b981 });
-
-      const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.04, 0.34, 8), crimsonWrapMat);
-      grip.position.y = 0;
-      sword.add(grip);
-
-      const pommel = new THREE.Mesh(new THREE.ConeGeometry(0.065, 0.18, 4), gemMat);
-      pommel.rotation.x = Math.PI;
-      pommel.position.y = -0.24;
-      sword.add(pommel);
-
-      const guardBase = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.08, 0.12), goldMat);
-      guardBase.position.y = 0.18;
-      sword.add(guardBase);
-
-      const centerGem = new THREE.Mesh(new THREE.OctahedronGeometry(0.085, 0), gemMat);
-      centerGem.scale.set(1.1, 1.3, 0.55);
-      centerGem.position.set(0, 0.21, 0.05);
-      sword.add(centerGem);
-
-      for (const side of [-1, 1]) {
-        const horn = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.28, 5), goldMat);
-        horn.position.set(side * 0.22, 0.24, 0);
-        horn.rotation.z = -side * 0.65;
-        sword.add(horn);
-
-        const accent = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.05, 0.08), emeraldMat);
-        accent.position.set(side * 0.14, 0.14, 0.02);
-        sword.add(accent);
-      }
-
-      for (const side of [-1, 1]) {
-        const frame = new THREE.Mesh(new THREE.BoxGeometry(0.055, 1.15, 0.035), goldMat);
-        frame.position.set(side * 0.11, 0.8, 0);
-        frame.rotation.z = -side * 0.045;
-        sword.add(frame);
-
-        for (let i = 0; i < 3; i++) {
-          const shard = new THREE.Mesh(new THREE.ConeGeometry(0.068 - i * 0.012, 0.34, 4), gemMat);
-          shard.scale.set(1.15, 1, 0.45);
-          shard.position.set(side * (0.11 + i * 0.012), 0.44 + i * 0.31, 0);
-          shard.rotation.z = -side * 0.05;
-          sword.add(shard);
-        }
-
-        const floatShard = new THREE.Mesh(new THREE.OctahedronGeometry(0.045, 0), gemMat);
-        floatShard.position.set(side * 0.21, 0.68, 0);
-        sword.add(floatShard);
-      }
-
-      sword.scale.setScalar(1.18);
-      return sword;
-    }
-
-    const playerRoot = new THREE.Group();
-    playerRoot.position.set(0, 0, 0);
-    scene.add(playerRoot);
-    playerRoot.add(createBlobShadow(0.65));
-
-    const playerVisual = new THREE.Group();
-    playerRoot.add(playerVisual);
-
-    const crimsonSword = createCrimsonCrystalSword();
-    crimsonSword.position.set(-0.46, 0.85, -0.15);
-    crimsonSword.rotation.set(1.25, 0, 0);
-    playerVisual.add(crimsonSword);
-
-    const slashArc = new THREE.Mesh(
-      new THREE.RingGeometry(0.85, 1.45, 18, 1, -Math.PI * 0.45, Math.PI * 0.9),
-      new THREE.MeshBasicMaterial({ color: 0xfca5a5, side: THREE.DoubleSide, transparent: true, opacity: 0.85 })
-    );
-    slashArc.rotation.x = Math.PI / 2;
-    slashArc.position.set(0, 1.2, -1.0);
-    slashArc.visible = false;
-    playerVisual.add(slashArc);
-
-    const placeholderMesh = new THREE.Mesh(
-      new THREE.CapsuleGeometry(0.32, 1.0, 4, 12),
-      new THREE.MeshLambertMaterial({ color: 0x38bdf8 })
-    );
-    placeholderMesh.position.y = 0.85;
-    playerVisual.add(placeholderMesh);
+    const loader = new GLTFLoader();
+    loader.register((parser) => new VRMLoaderPlugin(parser));
 
     let currentVrm = null;
-    let attachedToHand = false;
-    const vrmLoader = new GLTFLoader();
-    vrmLoader.register((parser) => new VRMLoaderPlugin(parser));
 
-    function disposeObject3D(obj) {
-      obj.traverse((node) => {
-        if (node.geometry) node.geometry.dispose();
-        if (node.material) {
-          const mats = Array.isArray(node.material) ? node.material : [node.material];
-          mats.forEach((m) => {
-            for (const key in m) {
-              if (m[key] && m[key].isTexture) m[key].dispose();
-            }
-            m.dispose();
-          });
-        }
+    function loadVrm(url) {
+      diagEl.textContent = '載入 VRM 中...';
+      loader.load(url, (gltf) => {
+        if (currentVrm) scene.remove(currentVrm.scene);
+        const vrm = gltf.userData.vrm;
+        currentVrm = vrm;
+        // 完全不改任何骨頭 rotation，只看原始 VRM 站姿
+        vrm.scene.rotation.set(0, Math.PI, 0);
+        vrm.scene.position.set(0, 0, 0);
+        scene.add(vrm.scene);
+      }, undefined, (err) => {
+        diagEl.textContent = '載入失敗：' + (err?.message || err);
       });
     }
 
-    function attachSwordToRightHand(vrm) {
-      attachedToHand = false;
-      const rightHand = vrm.humanoid?.getNormalizedBoneNode('rightHand');
-      if (rightHand) {
-        if (crimsonSword.parent) crimsonSword.parent.remove(crimsonSword);
-        rightHand.add(crimsonSword);
-        crimsonSword.position.set(0, -0.02, -0.04);
-        crimsonSword.rotation.set(-Math.PI * 0.42, 0.15, 0);
-        attachedToHand = true;
-      } else {
-        if (crimsonSword.parent !== playerVisual) {
-          if (crimsonSword.parent) crimsonSword.parent.remove(crimsonSword);
-          playerVisual.add(crimsonSword);
-        }
-      }
-    }
-
-    function loadVRMFromUrl(url, label = 'model 4.vrm') {
-      setStatus(`狀態：正在載入 ${label}...`);
-      vrmLoader.load(
-        url,
-        (gltf) => {
-          const vrm = gltf.userData.vrm;
-          if (!vrm) {
-            setStatus(`狀態：${label} 缺少 VRM 資料`);
-            return;
-          }
-          if (currentVrm) {
-            playerVisual.remove(currentVrm.scene);
-            disposeObject3D(currentVrm.scene);
-          } else if (placeholderMesh.parent) {
-            playerVisual.remove(placeholderMesh);
-          }
-          vrm.scene.rotation.set(0, Math.PI, 0);
-          vrm.scene.position.set(0, 0, 0);
-          playerVisual.add(vrm.scene);
-          currentVrm = vrm;
-          attachSwordToRightHand(vrm);
-          setStatus(`狀態：${label} 已載入（${attachedToHand ? '大劍已握於右手' : '使用側掛持劍'}）`);
-        },
-        undefined,
-        (err) => {
-          console.error(err);
-          setStatus(`載入 ${label} 失敗：${err?.message || '請確認路徑'}`, true);
-        }
-      );
-    }
-
-    loadVRMFromUrl('./model%204.vrm', 'model 4.vrm');
+    loadVrm('./model%204.vrm');
 
     document.getElementById('vrm-upload').addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      loadVRMFromUrl(URL.createObjectURL(file), file.name);
+      const f = e.target.files?.[0];
+      if (f) loadVrm(URL.createObjectURL(f));
     });
-
-    const enemyRoot = new THREE.Group();
-    enemyRoot.position.set(0, 0, -4.5);
-    scene.add(enemyRoot);
-    enemyRoot.add(createBlobShadow(1.1));
-
-    const enemyBody = new THREE.Mesh(
-      new THREE.DodecahedronGeometry(1.0, 0),
-      new THREE.MeshLambertMaterial({ color: 0x475569 })
-    );
-    enemyBody.position.y = 1.1;
-    enemyRoot.add(enemyBody);
-
-    const hornMat = new THREE.MeshLambertMaterial({ color: 0xf59e0b });
-    const enemyHorn = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.9, 6), hornMat);
-    enemyHorn.position.set(0, 2.25, 0.2);
-    enemyRoot.add(enemyHorn);
-
-    let hornHp = 3;
-    let enemyHitFlash = 0;
-
-    const moveInput = { x: 0, z: 0 };
-    const joyZone = document.getElementById('joystick-zone');
-    const joyKnob = document.getElementById('joystick-knob');
-    let joyTouchId = null;
-
-    joyZone.addEventListener('touchstart', (e) => {
-      const touch = e.changedTouches[0];
-      joyTouchId = touch.identifier;
-      updateJoystick(touch);
-    });
-    joyZone.addEventListener('touchmove', (e) => {
-      for (const touch of e.changedTouches) {
-        if (touch.identifier === joyTouchId) updateJoystick(touch);
-      }
-    });
-    const resetJoystick = (e) => {
-      for (const touch of e.changedTouches) {
-        if (touch.identifier === joyTouchId) {
-          joyTouchId = null;
-          moveInput.x = 0; moveInput.z = 0;
-          joyKnob.style.transform = 'translate(0px, 0px)';
-        }
-      }
-    };
-    joyZone.addEventListener('touchend', resetJoystick);
-    joyZone.addEventListener('touchcancel', resetJoystick);
-
-    function updateJoystick(touch) {
-      const rect = joyZone.getBoundingClientRect();
-      const cx = rect.left + rect.width / 2;
-      const cy = rect.top + rect.height / 2;
-      const maxR = rect.width / 2 - 10;
-      let dx = touch.clientX - cx;
-      let dy = touch.clientY - cy;
-      const dist = Math.hypot(dx, dy);
-      if (dist > maxR) {
-        dx = (dx / dist) * maxR;
-        dy = (dy / dist) * maxR;
-      }
-      joyKnob.style.transform = `translate(${dx}px, ${dy}px)`;
-      moveInput.x = dx / maxR;
-      moveInput.z = dy / maxR;
-    }
-
-    const DASH_DURATION = 0.25;
-    const ATTACK_DURATION = 0.42;
-    let dashTimer = 0;
-    let attackTimer = 0;
-    let walkPhase = 0;
-    let idlePhase = 0;
-    let targetYaw = 0;
-
-    function triggerDodge() {
-      if (dashTimer > 0) return;
-      dashTimer = DASH_DURATION;
-      setStatus('狀態：發動閃避衝刺！');
-    }
-
-    function triggerAttack() {
-      if (attackTimer > 0) return;
-      attackTimer = ATTACK_DURATION;
-
-      const forwardX = -Math.sin(playerRoot.rotation.y);
-      const forwardZ = -Math.cos(playerRoot.rotation.y);
-      playerRoot.position.x += forwardX * 0.42;
-      playerRoot.position.z += forwardZ * 0.42;
-
-      const dist = playerRoot.position.distanceTo(enemyRoot.position);
-      if (dist < 3.6) {
-        enemyHitFlash = 0.18;
-        if (hornHp > 0) {
-          hornHp--;
-          if (hornHp === 0) {
-            enemyRoot.remove(enemyHorn);
-            enemyHorn.geometry.dispose();
-            hornMat.dispose();
-            setStatus('狀態：斬擊命中！角晶已破壞');
-          } else {
-            setStatus(`狀態：斬擊命中！角晶剩餘 ${hornHp} 次`);
-          }
-        } else {
-          setStatus('狀態：斬擊命中測試怪！');
-        }
-      } else {
-        setStatus('狀態：揮舞緋紅晶刃大劍！');
-      }
-    }
-
-    const btnDodge = document.getElementById('btn-dodge');
-    const btnAttack = document.getElementById('btn-attack');
-    btnDodge.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); triggerDodge(); });
-    btnAttack.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); triggerAttack(); });
-
-    const keys = {};
-    window.addEventListener('keydown', (e) => {
-      keys[e.code] = true;
-      if (e.code === 'KeyJ') triggerAttack();
-      if (e.code === 'KeyK') triggerDodge();
-    });
-    window.addEventListener('keyup', (e) => { keys[e.code] = false; });
-
-    function lerpAngle(current, target, alpha) {
-      let diff = target - current;
-      while (diff > Math.PI) diff -= Math.PI * 2;
-      while (diff < -Math.PI) diff += Math.PI * 2;
-      return current + diff * alpha;
-    }
-
-    function clampRot(val, limit = 1.4) {
-      return Math.max(-limit, Math.min(limit, val));
-    }
-
-    function smoothBoneRot(bone, rx, ry, rz, alpha) {
-      if (!bone) return;
-      bone.rotation.x = lerpAngle(bone.rotation.x, clampRot(rx), alpha);
-      bone.rotation.y = lerpAngle(bone.rotation.y, clampRot(ry), alpha);
-      bone.rotation.z = lerpAngle(bone.rotation.z, clampRot(rz), alpha);
-    }
-
-    function applySafeHumanPose(isMoving, delta) {
-      const blend = Math.min(1, delta * 13);
-      const breathe = Math.sin(idlePhase);
-
-      playerRoot.position.y = 0;
-      playerVisual.position.set(0, 0, 0);
-      playerVisual.rotation.set(0, 0, 0);
-      slashArc.visible = false;
-
-      if (!attachedToHand) {
-        crimsonSword.position.set(-0.46, 0.85, -0.15);
-        crimsonSword.rotation.set(1.25, 0, 0);
-      }
-
-      if (attackTimer > 0) {
-        const p = 1 - attackTimer / ATTACK_DURATION;
-        playerVisual.rotation.y = (0.3 - p) * 0.55;
-        slashArc.visible = p >= 0.2 && p <= 0.68;
-        slashArc.rotation.z = -0.4 + p * 1.4;
-        if (!attachedToHand) {
-          crimsonSword.position.set(-0.25, 1.25 - p * 0.35, -0.55);
-          crimsonSword.rotation.set(-1.2 + p * 2.2, 0, -0.45 + p * 0.9);
-        }
-      } else if (isMoving) {
-        playerVisual.position.y = Math.abs(Math.sin(walkPhase)) * 0.02;
-      }
-
-      if (currentVrm && currentVrm.humanoid) {
-        const h = currentVrm.humanoid;
-        const hips = h.getNormalizedBoneNode('hips');
-        const spine = h.getNormalizedBoneNode('spine');
-        const chest = h.getNormalizedBoneNode('chest');
-        const head = h.getNormalizedBoneNode('head');
-        const lArm = h.getNormalizedBoneNode('leftUpperArm');
-        const rArm = h.getNormalizedBoneNode('rightUpperArm');
-        const lForearm = h.getNormalizedBoneNode('leftLowerArm');
-        const rForearm = h.getNormalizedBoneNode('rightLowerArm');
-        const lLeg = h.getNormalizedBoneNode('leftUpperLeg');
-        const rLeg = h.getNormalizedBoneNode('rightUpperLeg');
-        const lKnee = h.getNormalizedBoneNode('leftLowerLeg');
-        const rKnee = h.getNormalizedBoneNode('rightLowerLeg');
-
-        // 鎖定直立站姿基準，絕不翻轉或對折
-        smoothBoneRot(hips, 0, 0, 0, blend);
-
-        const leftDownZ = -1.2;
-        const rightDownZ = 1.2;
-
-        if (attackTimer > 0) {
-          const p = 1 - attackTimer / ATTACK_DURATION;
-          const swing = p < 0.25 ? -1.1 * (p / 0.25) : -1.1 + ((p - 0.25) / 0.75) * 1.7;
-          smoothBoneRot(spine, 0.05, (0.3 - p) * 0.35, 0, blend);
-          smoothBoneRot(chest, 0.05, 0, 0, blend);
-          smoothBoneRot(head, 0, 0, 0, blend);
-          smoothBoneRot(rArm, swing, 0, rightDownZ * 0.3, blend);
-          smoothBoneRot(rForearm, -0.3, 0, 0, blend);
-          smoothBoneRot(lArm, 0.2, 0, leftDownZ, blend);
-          smoothBoneRot(lForearm, -0.2, 0, 0, blend);
-          smoothBoneRot(lLeg, 0.12, 0, 0, blend);
-          smoothBoneRot(rLeg, -0.12, 0, 0, blend);
-          smoothBoneRot(lKnee, 0.1, 0, 0, blend);
-          smoothBoneRot(rKnee, 0.1, 0, 0, blend);
-        } else if (dashTimer > 0) {
-          smoothBoneRot(spine, 0.08, 0, 0, blend);
-          smoothBoneRot(chest, 0.04, 0, 0, blend);
-          smoothBoneRot(head, 0, 0, 0, blend);
-          smoothBoneRot(lArm, 0.25, 0, leftDownZ, blend);
-          smoothBoneRot(rArm, 0.25, 0, rightDownZ, blend);
-          smoothBoneRot(lForearm, -0.25, 0, 0, blend);
-          smoothBoneRot(rForearm, -0.35, 0, 0, blend);
-          smoothBoneRot(lLeg, -0.22, 0, 0, blend);
-          smoothBoneRot(rLeg, 0.18, 0, 0, blend);
-          smoothBoneRot(lKnee, 0.18, 0, 0, blend);
-          smoothBoneRot(rKnee, 0.12, 0, 0, blend);
-        } else if (isMoving) {
-          const s = Math.sin(walkPhase);
-          const c = Math.cos(walkPhase);
-          smoothBoneRot(lLeg, -s * 0.45, 0, 0, blend);
-          smoothBoneRot(rLeg, s * 0.45, 0, 0, blend);
-          smoothBoneRot(lKnee, Math.max(0, -c) * 0.38, 0, 0, blend);
-          smoothBoneRot(rKnee, Math.max(0, c) * 0.38, 0, 0, blend);
-          smoothBoneRot(lArm, s * 0.32, 0, leftDownZ, blend);
-          smoothBoneRot(rArm, -s * 0.28, 0, rightDownZ, blend);
-          smoothBoneRot(lForearm, -0.2, 0, 0, blend);
-          smoothBoneRot(rForearm, -0.32, 0, 0, blend);
-          smoothBoneRot(spine, 0.03, -s * 0.04, 0, blend);
-          smoothBoneRot(chest, 0, 0, 0, blend);
-          smoothBoneRot(head, 0, 0, 0, blend);
-        } else {
-          smoothBoneRot(lArm, breathe * 0.03, 0, leftDownZ, blend);
-          smoothBoneRot(rArm, -0.14 - breathe * 0.03, 0, rightDownZ, blend);
-          smoothBoneRot(lForearm, -0.16, 0, 0, blend);
-          smoothBoneRot(rForearm, -0.34, 0, 0, blend);
-          smoothBoneRot(spine, breathe * 0.015, 0, 0, blend);
-          smoothBoneRot(chest, breathe * 0.015, 0, 0, blend);
-          smoothBoneRot(head, 0, Math.sin(idlePhase * 0.5) * 0.03, 0, blend);
-          smoothBoneRot(lLeg, 0, 0, 0, blend);
-          smoothBoneRot(rLeg, 0, 0, 0, blend);
-          smoothBoneRot(lKnee, 0, 0, 0, blend);
-          smoothBoneRot(rKnee, 0, 0, 0, blend);
-        }
-      }
-    }
 
     const clock = new THREE.Clock();
-    const fpsEl = document.getElementById('stat-fps');
-    const dprEl = document.getElementById('stat-dpr');
-    const callsEl = document.getElementById('stat-calls');
-
-    let frameCount = 0;
-    let fpsTimer = 0;
-
-    setStatus('狀態：就緒（已移除翻轉軌道，姿態保護已啟用）');
-
     function animate() {
       requestAnimationFrame(animate);
       const delta = Math.min(clock.getDelta(), 0.05);
-      idlePhase += delta * 2.0;
 
-      let ix = moveInput.x + (keys['KeyD'] ? 1 : 0) - (keys['KeyA'] ? 1 : 0);
-      let iz = moveInput.z + (keys['KeyS'] ? 1 : 0) - (keys['KeyW'] ? 1 : 0);
-      const len = Math.hypot(ix, iz);
-      if (len > 1) { ix /= len; iz /= len; }
-
-      const isMoving = len > 0.05;
-      if (isMoving) {
-        walkPhase += delta * 10;
-        targetYaw = Math.atan2(-ix, -iz);
-      } else {
-        walkPhase = 0;
+      if (currentVrm) {
+        currentVrm.update(delta);
+        const hips = currentVrm.humanoid?.getNormalizedBoneNode('hips');
+        const spine = currentVrm.humanoid?.getNormalizedBoneNode('spine');
+        const chest = currentVrm.humanoid?.getNormalizedBoneNode('chest');
+        const fmt = (b) => b ? `(${b.rotation.x.toFixed(2)}, ${b.rotation.y.toFixed(2)}, ${b.rotation.z.toFixed(2)})` : '無';
+        const hPos = hips ? `${hips.position.x.toFixed(2)}, ${hips.position.y.toFixed(2)}, ${hips.position.z.toFixed(2)}` : '無';
+        diagEl.textContent =
+          `【純原始 VRM 診斷（未套用任何動作）】\n` +
+          `hips pos: ${hPos}\n` +
+          `hips rot: ${fmt(hips)}\n` +
+          `spine rot: ${fmt(spine)}\n` +
+          `chest rot: ${fmt(chest)}`;
       }
-
-      if (dashTimer > 0) {
-        const forwardX = -Math.sin(playerRoot.rotation.y);
-        const forwardZ = -Math.cos(playerRoot.rotation.y);
-        playerRoot.position.x += forwardX * 11.5 * delta;
-        playerRoot.position.z += forwardZ * 11.5 * delta;
-        dashTimer = Math.max(0, dashTimer - delta);
-      } else if (isMoving) {
-        playerRoot.position.x += ix * 4.8 * delta;
-        playerRoot.position.z += iz * 4.8 * delta;
-        playerRoot.rotation.y = lerpAngle(playerRoot.rotation.y, targetYaw, Math.min(1, delta * 12));
-      }
-
-      if (attackTimer > 0) {
-        attackTimer = Math.max(0, attackTimer - delta);
-      }
-
-      const distFromCenter = Math.hypot(playerRoot.position.x, playerRoot.position.z);
-      if (distFromCenter > 12.8) {
-        const ratio = 12.8 / distFromCenter;
-        playerRoot.position.x *= ratio;
-        playerRoot.position.z *= ratio;
-      }
-
-      enemyBody.rotation.y += delta * 0.6;
-      if (enemyHitFlash > 0) {
-        enemyHitFlash -= delta;
-        enemyBody.material.color.setHex(0xef4444);
-      } else {
-        enemyBody.material.color.setHex(0x475569);
-      }
-
-      applySafeHumanPose(isMoving, delta);
-      if (currentVrm) currentVrm.update(delta);
-      playerRoot.position.y = 0;
-
-      camera.position.x += (playerRoot.position.x - camera.position.x) * 8 * delta;
-      camera.position.z += (playerRoot.position.z + 6.5 - camera.position.z) * 8 * delta;
-      camera.lookAt(playerRoot.position.x, 1.1, playerRoot.position.z);
-
       renderer.render(scene, camera);
-
-      frameCount++;
-      fpsTimer += delta;
-      if (fpsTimer >= 1.0) {
-        const fps = Math.round(frameCount / fpsTimer);
-        fpsEl.textContent = fps;
-        fpsEl.className = fps >= 50 ? 'stat-good' : (fps >= 35 ? 'stat-warn' : 'stat-bad');
-        callsEl.textContent = renderer.info.render.calls;
-
-        if (fps < 45 && currentDpr > MIN_DPR) {
-          currentDpr = Math.max(MIN_DPR, +(currentDpr - 0.15).toFixed(2));
-          renderer.setPixelRatio(currentDpr);
-          dprEl.textContent = currentDpr.toFixed(2);
-        } else if (fps >= 56 && currentDpr < MAX_DPR) {
-          currentDpr = Math.min(MAX_DPR, +(currentDpr + 0.05).toFixed(2));
-          renderer.setPixelRatio(currentDpr);
-          dprEl.textContent = currentDpr.toFixed(2);
-        }
-
-        frameCount = 0;
-        fpsTimer = 0;
-      }
     }
     animate();
   </script>
