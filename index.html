@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>雲海群島 - 階段一動作與晶刃大劍測試</title>
+  <title>雲海群島 - 階段一流暢動作測試</title>
   <style>
     * { box-sizing: border-box; user-select: none; -webkit-user-select: none; margin: 0; padding: 0; }
     html, body { width: 100%; height: 100%; overflow: hidden; background: #000000; font-family: sans-serif; touch-action: none; }
@@ -412,12 +412,13 @@
       moveInput.z = dy / maxR;
     }
 
-    const DASH_DURATION = 0.24;
-    const ATTACK_DURATION = 0.36;
+    const DASH_DURATION = 0.25;
+    const ATTACK_DURATION = 0.42;
     let dashTimer = 0;
     let attackTimer = 0;
     let walkPhase = 0;
     let idlePhase = 0;
+    let targetYaw = 0;
 
     function triggerDodge() {
       if (dashTimer > 0) return;
@@ -431,8 +432,8 @@
 
       const forwardX = -Math.sin(playerRoot.rotation.y);
       const forwardZ = -Math.cos(playerRoot.rotation.y);
-      playerRoot.position.x += forwardX * 0.45;
-      playerRoot.position.z += forwardZ * 0.45;
+      playerRoot.position.x += forwardX * 0.42;
+      playerRoot.position.z += forwardZ * 0.42;
 
       const dist = playerRoot.position.distanceTo(enemyRoot.position);
       if (dist < 3.6) {
@@ -468,49 +469,82 @@
     });
     window.addEventListener('keyup', (e) => { keys[e.code] = false; });
 
-    function resetRotationOnly(bone) {
-      if (!bone) return;
-      bone.rotation.set(0, 0, 0);
+    // 角度平滑插值輔助（處理角度環繞最短路徑）
+    function lerpAngle(current, target, alpha) {
+      let diff = target - current;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      return current + diff * alpha;
     }
 
-    function applyHumanPose(isMoving) {
+    function smoothBoneRot(bone, rx, ry, rz, alpha) {
+      if (!bone) return;
+      bone.rotation.x = lerpAngle(bone.rotation.x, rx, alpha);
+      bone.rotation.y = lerpAngle(bone.rotation.y, ry, alpha);
+      bone.rotation.z = lerpAngle(bone.rotation.z, rz, alpha);
+    }
+
+    function applySmoothHumanPose(isMoving, delta) {
+      const blend = Math.min(1, delta * 14);
+      const breathe = Math.sin(idlePhase);
+
       playerRoot.position.y = 0;
-      playerVisual.position.set(0, 0, 0);
-      playerVisual.rotation.set(0, 0, 0);
       slashArc.visible = false;
 
       if (!attachedToHand) {
-        crimsonSword.position.set(-0.46, 0.85, -0.15);
-        crimsonSword.rotation.set(1.25, 0, 0);
+        crimsonSword.position.lerp(new THREE.Vector3(-0.46, 0.85, -0.15), blend);
+        crimsonSword.rotation.x = lerpAngle(crimsonSword.rotation.x, 1.25, blend);
       }
 
-      const breathe = Math.sin(idlePhase) * 0.02;
+      let targetVisualY = 0;
+      let targetVisualRotY = 0;
 
       if (dashTimer > 0) {
         const p = 1 - dashTimer / DASH_DURATION;
-        playerVisual.position.y = Math.sin(p * Math.PI) * 0.06;
-        playerVisual.rotation.set(0, 0, 0);
+        targetVisualY = Math.sin(p * Math.PI) * 0.05;
+        if (!attachedToHand) {
+          crimsonSword.rotation.x = lerpAngle(crimsonSword.rotation.x, 1.55, blend);
+        }
       } else if (attackTimer > 0) {
         const p = 1 - attackTimer / ATTACK_DURATION;
-        playerVisual.position.y = 0;
-        playerVisual.rotation.set(0, (0.45 - p) * 0.85, 0);
-        slashArc.visible = p < 0.75;
-        slashArc.rotation.z = (p - 0.35) * 1.9;
+        // 三段式揮砍節奏：0~0.25 蓄力微收、0.25~0.65 快速揮出、0.65~1.0 收招回位
+        let swingCurve = 0;
+        if (p < 0.25) {
+          swingCurve = -0.25 * (p / 0.25);
+        } else if (p < 0.65) {
+          const sp = (p - 0.25) / 0.4;
+          swingCurve = -0.25 + sp * sp * 1.25;
+        } else {
+          const rp = (p - 0.65) / 0.35;
+          swingCurve = 1.0 * (1 - rp);
+        }
+
+        targetVisualRotY = (0.35 - swingCurve) * 0.7;
+        slashArc.visible = p >= 0.22 && p <= 0.68;
+        slashArc.rotation.z = -0.5 + swingCurve * 1.6;
+
         if (!attachedToHand) {
-          crimsonSword.position.set(-0.25, 1.25 - p * 0.35, -0.55);
-          crimsonSword.rotation.set(-1.35 + p * 2.4, 0, -0.55 + p * 1.1);
+          crimsonSword.position.set(-0.25, 1.25 - swingCurve * 0.35, -0.55);
+          crimsonSword.rotation.set(-1.2 + swingCurve * 2.2, 0, -0.45 + swingCurve * 0.9);
         }
       } else if (isMoving) {
-        playerVisual.position.y = Math.abs(Math.sin(walkPhase)) * 0.03;
+        // 雙腳著地節奏（|sin| 讓每一步都自然起伏）
+        targetVisualY = Math.abs(Math.sin(walkPhase)) * 0.032;
       } else {
-        playerVisual.position.y = 0;
+        targetVisualY = Math.max(0, breathe * 0.008);
       }
+
+      playerVisual.position.y = THREE.MathUtils.lerp(playerVisual.position.y, targetVisualY, blend);
+      playerVisual.rotation.x = THREE.MathUtils.lerp(playerVisual.rotation.x, 0, blend);
+      playerVisual.rotation.y = lerpAngle(playerVisual.rotation.y, targetVisualRotY, blend);
+      playerVisual.rotation.z = THREE.MathUtils.lerp(playerVisual.rotation.z, 0, blend);
 
       if (currentVrm && currentVrm.humanoid) {
         const h = currentVrm.humanoid;
         const hips = h.getNormalizedBoneNode('hips');
         const spine = h.getNormalizedBoneNode('spine');
         const chest = h.getNormalizedBoneNode('chest');
+        const head = h.getNormalizedBoneNode('head');
         const lArm = h.getNormalizedBoneNode('leftUpperArm');
         const rArm = h.getNormalizedBoneNode('rightUpperArm');
         const lForearm = h.getNormalizedBoneNode('leftLowerArm');
@@ -522,70 +556,92 @@
         const lKnee = h.getNormalizedBoneNode('leftLowerLeg');
         const rKnee = h.getNormalizedBoneNode('rightLowerLeg');
 
-        [hips, spine, chest, lArm, rArm, lForearm, rForearm, lHand, rHand, lLeg, rLeg, lKnee, rKnee].forEach(resetRotationOnly);
-
-        // 鎖定模式 A
+        // 模式 A 下垂基準
         const leftDownZ = -1.2;
         const rightDownZ = 1.2;
 
         if (attackTimer > 0) {
           const p = 1 - attackTimer / ATTACK_DURATION;
-          if (spine) spine.rotation.y = (0.4 - p) * 0.6;
-          if (rArm) {
-            rArm.rotation.z = rightDownZ * 0.25;
-            rArm.rotation.x = -1.45 + p * 2.25;
-          }
-          if (rForearm) rForearm.rotation.x = -0.35;
-          if (rHand) rHand.rotation.x = 0.25;
-          if (lArm) {
-            lArm.rotation.z = leftDownZ;
-            lArm.rotation.x = 0.2;
-          }
-          if (lForearm) lForearm.rotation.x = -0.2;
-          if (lLeg) lLeg.rotation.x = 0.18;
-          if (rLeg) rLeg.rotation.x = -0.18;
+          const phaseRot = p < 0.25
+            ? -1.55 * (p / 0.25)
+            : (p < 0.65
+              ? -1.55 + ((p - 0.25) / 0.4) * 2.35
+              : 0.8 * (1 - (p - 0.65) / 0.35));
+
+          smoothBoneRot(spine, 0.08, (0.35 - phaseRot) * 0.45, 0, blend);
+          smoothBoneRot(chest, 0.08, 0, 0, blend);
+          smoothBoneRot(head, -0.05, 0, 0, blend);
+
+          smoothBoneRot(rArm, phaseRot, 0, rightDownZ * 0.28, blend);
+          smoothBoneRot(rForearm, -0.35, 0, 0, blend);
+          smoothBoneRot(rHand, 0.2, 0, 0, blend);
+
+          smoothBoneRot(lArm, 0.22, 0, leftDownZ, blend);
+          smoothBoneRot(lForearm, -0.22, 0, 0, blend);
+          smoothBoneRot(lHand, 0, 0, 0, blend);
+
+          smoothBoneRot(lLeg, 0.16, 0, 0, blend);
+          smoothBoneRot(rLeg, -0.16, 0, 0, blend);
+          smoothBoneRot(lKnee, 0.12, 0, 0, blend);
+          smoothBoneRot(rKnee, 0.12, 0, 0, blend);
+          smoothBoneRot(hips, 0, 0, 0, blend);
         } else if (dashTimer > 0) {
-          if (spine) spine.rotation.x = 0.1;
-          if (lArm) { lArm.rotation.z = leftDownZ; lArm.rotation.x = 0.3; }
-          if (rArm) { rArm.rotation.z = rightDownZ; rArm.rotation.x = 0.3; }
-          if (lForearm) lForearm.rotation.x = -0.3;
-          if (rForearm) rForearm.rotation.x = -0.4;
-          if (lLeg) lLeg.rotation.x = -0.28;
-          if (rLeg) rLeg.rotation.x = 0.22;
-          if (lKnee) lKnee.rotation.x = 0.22;
-          if (rKnee) rKnee.rotation.x = 0.15;
+          smoothBoneRot(spine, 0.12, 0, 0, blend);
+          smoothBoneRot(chest, 0.06, 0, 0, blend);
+          smoothBoneRot(head, -0.08, 0, 0, blend);
+
+          smoothBoneRot(lArm, 0.32, 0, leftDownZ, blend);
+          smoothBoneRot(rArm, 0.32, 0, rightDownZ, blend);
+          smoothBoneRot(lForearm, -0.32, 0, 0, blend);
+          smoothBoneRot(rForearm, -0.42, 0, 0, blend);
+          smoothBoneRot(lHand, 0, 0, 0, blend);
+          smoothBoneRot(rHand, 0, 0, 0, blend);
+
+          smoothBoneRot(lLeg, -0.28, 0, 0, blend);
+          smoothBoneRot(rLeg, 0.22, 0, 0, blend);
+          smoothBoneRot(lKnee, 0.22, 0, 0, blend);
+          smoothBoneRot(rKnee, 0.14, 0, 0, blend);
+          smoothBoneRot(hips, 0, 0, 0, blend);
         } else if (isMoving) {
           const step = Math.sin(walkPhase);
           const stepCos = Math.cos(walkPhase);
-          if (lLeg) lLeg.rotation.x = -step * 0.55;
-          if (rLeg) rLeg.rotation.x = step * 0.55;
-          if (lKnee) lKnee.rotation.x = Math.max(0, -stepCos) * 0.45;
-          if (rKnee) rKnee.rotation.x = Math.max(0, stepCos) * 0.45;
-          if (lArm) {
-            lArm.rotation.z = leftDownZ;
-            lArm.rotation.x = step * 0.42;
-          }
-          if (rArm) {
-            rArm.rotation.z = rightDownZ;
-            rArm.rotation.x = -step * 0.35;
-          }
-          if (lForearm) lForearm.rotation.x = -0.22 - Math.max(0, step) * 0.2;
-          if (rForearm) rForearm.rotation.x = -0.35 - Math.max(0, -step) * 0.18;
-          if (spine) {
-            spine.rotation.x = 0.04;
-            spine.rotation.y = -step * 0.07;
-          }
+
+          // 雙腿前後踏步＋膝蓋自然屈伸
+          smoothBoneRot(lLeg, -step * 0.52, 0, 0, blend);
+          smoothBoneRot(rLeg, step * 0.52, 0, 0, blend);
+          smoothBoneRot(lKnee, Math.max(0, -stepCos) * 0.42, 0, 0, blend);
+          smoothBoneRot(rKnee, Math.max(0, stepCos) * 0.42, 0, 0, blend);
+
+          // 雙手自然下垂並與對側腳步反向擺動
+          smoothBoneRot(lArm, step * 0.38, 0, leftDownZ, blend);
+          smoothBoneRot(rArm, -step * 0.32, 0, rightDownZ, blend);
+          smoothBoneRot(lForearm, -0.2 - Math.max(0, step) * 0.18, 0, 0, blend);
+          smoothBoneRot(rForearm, -0.34 - Math.max(0, -step) * 0.16, 0, 0, blend);
+          smoothBoneRot(lHand, 0, 0, 0, blend);
+          smoothBoneRot(rHand, 0, 0, 0, blend);
+
+          smoothBoneRot(spine, 0.04, -step * 0.06, 0, blend);
+          smoothBoneRot(chest, 0.02, -step * 0.04, 0, blend);
+          smoothBoneRot(head, -0.03, step * 0.04, 0, blend);
+          smoothBoneRot(hips, 0, step * 0.05, 0, blend);
         } else {
-          if (lArm) {
-            lArm.rotation.z = leftDownZ;
-            lArm.rotation.x = breathe * 0.5;
-          }
-          if (rArm) {
-            rArm.rotation.z = rightDownZ;
-            rArm.rotation.x = -0.15 - breathe * 0.5;
-          }
-          if (lForearm) lForearm.rotation.x = -0.18;
-          if (rForearm) rForearm.rotation.x = -0.38;
+          // 待機：自然垂臂、輕微呼吸與微幅頭部放鬆
+          smoothBoneRot(lArm, breathe * 0.04, 0, leftDownZ, blend);
+          smoothBoneRot(rArm, -0.14 - breathe * 0.04, 0, rightDownZ, blend);
+          smoothBoneRot(lForearm, -0.18, 0, 0, blend);
+          smoothBoneRot(rForearm, -0.36, 0, 0, blend);
+          smoothBoneRot(lHand, 0, 0, 0, blend);
+          smoothBoneRot(rHand, 0, 0, 0, blend);
+
+          smoothBoneRot(spine, breathe * 0.02, 0, 0, blend);
+          smoothBoneRot(chest, breathe * 0.025, 0, 0, blend);
+          smoothBoneRot(head, -breathe * 0.02, Math.sin(idlePhase * 0.5) * 0.04, 0, blend);
+
+          smoothBoneRot(lLeg, 0, 0, 0, blend);
+          smoothBoneRot(rLeg, 0, 0, 0, blend);
+          smoothBoneRot(lKnee, 0, 0, 0, blend);
+          smoothBoneRot(rKnee, 0, 0, 0, blend);
+          smoothBoneRot(hips, 0, 0, 0, blend);
         }
       }
     }
@@ -598,12 +654,12 @@
     let frameCount = 0;
     let fpsTimer = 0;
 
-    setStatus('狀態：就緒（模式 A 已鎖定）');
+    setStatus('狀態：就緒（平滑關節插值＋三段式斬擊）');
 
     function animate() {
       requestAnimationFrame(animate);
       const delta = Math.min(clock.getDelta(), 0.05);
-      idlePhase += delta * 2.2;
+      idlePhase += delta * 2.1;
 
       let ix = moveInput.x + (keys['KeyD'] ? 1 : 0) - (keys['KeyA'] ? 1 : 0);
       let iz = moveInput.z + (keys['KeyS'] ? 1 : 0) - (keys['KeyW'] ? 1 : 0);
@@ -612,7 +668,8 @@
 
       const isMoving = len > 0.05;
       if (isMoving) {
-        walkPhase += delta * 10.5;
+        walkPhase += delta * 10.2;
+        targetYaw = Math.atan2(-ix, -iz);
       } else {
         walkPhase = 0;
       }
@@ -626,7 +683,7 @@
       } else if (isMoving) {
         playerRoot.position.x += ix * 4.8 * delta;
         playerRoot.position.z += iz * 4.8 * delta;
-        playerRoot.rotation.y = Math.atan2(-ix, -iz);
+        playerRoot.rotation.y = lerpAngle(playerRoot.rotation.y, targetYaw, Math.min(1, delta * 14));
       }
 
       if (attackTimer > 0) {
@@ -648,7 +705,7 @@
         enemyBody.material.color.setHex(0x475569);
       }
 
-      applyHumanPose(isMoving);
+      applySmoothHumanPose(isMoving, delta);
       if (currentVrm) currentVrm.update(delta);
 
       playerRoot.position.y = 0;
