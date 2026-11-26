@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>雲海群島 - FBX 動作連線診斷與穩定測試</title>
+  <title>雲海群島 - FBX 動作驅動 VRM 測試</title>
   <style>
     * { box-sizing: border-box; user-select: none; -webkit-user-select: none; margin: 0; padding: 0; }
     html, body { width: 100%; height: 100%; overflow: hidden; background: #000000; font-family: sans-serif; touch-action: none; }
@@ -80,7 +80,7 @@
       <div>FPS: <span id="stat-fps" class="stat-good">--</span></div>
       <div>渲染倍率: <span id="stat-dpr">1.50</span></div>
       <div>Draw Calls: <span id="stat-calls">0</span></div>
-      <div>骨架姿態: <span class="stat-good">防對折保護中</span></div>
+      <div>目前動作: <span id="stat-cur-anim" class="stat-good">內建待機</span></div>
     </div>
 
     <div id="joystick-zone"><div id="joystick-knob"></div></div>
@@ -100,6 +100,8 @@
 
     const statusEl = document.getElementById('status-text');
     const fbxReportEl = document.getElementById('fbx-report');
+    const curAnimEl = document.getElementById('stat-cur-anim');
+
     function setStatus(msg, isError = false) {
       statusEl.textContent = msg;
       statusEl.style.color = isError ? '#fca5a5' : '#e2e8f0';
@@ -290,46 +292,187 @@
 
     let currentVrm = null;
     let attachedToHand = false;
+    let fbxMixer = null;
+
+    const fbxSlots = {
+      idle: { clip: null, action: null, ok: false, tracks: 0, sampleBone: '無' },
+      walk: { clip: null, action: null, ok: false, tracks: 0, sampleBone: '無' },
+      attack: { clip: null, action: null, ok: false, tracks: 0, sampleBone: '無' },
+      dodge: { clip: null, action: null, ok: false, tracks: 0, sampleBone: '無' }
+    };
+    let activeFbxAction = null;
+    let activeFbxSlotKey = null;
+
+    const BONE_ALIASES = {
+      hips: ['hips', 'pelvis', 'mixamorighips'],
+      spine: ['spine', 'mixamorigspine'],
+      chest: ['chest', 'spine1', 'spine2', 'upperchest', 'mixamorigspine1', 'mixamorigspine2'],
+      neck: ['neck', 'mixamorigneck'],
+      head: ['head', 'mixamorighead'],
+      leftShoulder: ['leftshoulder', 'shoulder_l', 'mixamorigleftshoulder'],
+      rightShoulder: ['rightshoulder', 'shoulder_r', 'mixamorigrightshoulder'],
+      leftUpperArm: ['leftupperarm', 'leftarm', 'upperarm_l', 'mixamorigleftarm'],
+      rightUpperArm: ['rightupperarm', 'rightarm', 'upperarm_r', 'mixamorigrightarm'],
+      leftLowerArm: ['leftlowerarm', 'leftforearm', 'lowerarm_l', 'mixamorigleftforearm'],
+      rightLowerArm: ['rightlowerarm', 'rightforearm', 'lowerarm_r', 'mixamorigrightforearm'],
+      leftHand: ['lefthand', 'hand_l', 'mixamoriglefthand'],
+      rightHand: ['righthand', 'hand_r', 'mixamorigrighthand'],
+      leftUpperLeg: ['leftupperleg', 'leftupleg', 'thigh_l', 'mixamorigleftupleg'],
+      rightUpperLeg: ['rightupperleg', 'rightupleg', 'thigh_r', 'mixamorigrightupleg'],
+      leftLowerLeg: ['leftlowerleg', 'leftleg', 'calf_l', 'mixamorigleftleg'],
+      rightLowerLeg: ['rightlowerleg', 'rightleg', 'calf_r', 'mixamorigrightleg'],
+      leftFoot: ['leftfoot', 'foot_l', 'mixamorigleftfoot'],
+      rightFoot: ['rightfoot', 'foot_r', 'mixamorigrightfoot']
+    };
+
+    function mapBoneName(rawBone) {
+      if (!rawBone) return null;
+      const tail = rawBone.split(/[|:]/).pop() || rawBone;
+      const clean = tail.replace(/^mixamorig/i, '').replace(/[\s_-]/g, '').toLowerCase();
+      for (const [vrmBone, aliases] of Object.entries(BONE_ALIASES)) {
+        if (aliases.includes(clean)) return vrmBone;
+      }
+      return null;
+    }
+
+    // 將 FBX 旋轉轉為「相對於第一幀的變化量」，並做安全幅度限制以避免對折翻轉
+    function buildSafeDeltaClip(rawClip, vrm) {
+      if (!rawClip || !vrm?.humanoid) return null;
+      const tracks = [];
+
+      for (const track of rawClip.tracks) {
+        if (!track.name.endsWith('.quaternion')) continue;
+        const rawBone = track.name.slice(0, -'.quaternion'.length);
+        const vrmBone = mapBoneName(rawBone);
+        if (!vrmBone || vrmBone === 'hips') continue;
+
+        const targetNode = vrm.humanoid.getNormalizedBoneNode(vrmBone);
+        if (!targetNode || !targetNode.name) continue;
+
+        const values = track.values;
+        const count = values.length / 4;
+        if (count < 1) continue;
+
+        const q0 = new THREE.Quaternion(values[0], values[1], values[2], values[3]).normalize();
+        const q0Inv = q0.clone().invert();
+        const qCur = new THREE.Quaternion();
+        const qDelta = new THREE.Quaternion();
+        const qIdentity = new THREE.Quaternion();
+        const outValues = new Float32Array(values.length);
+
+        for (let i = 0; i < count; i++) {
+          const idx = i * 4;
+          qCur.set(values[idx], values[idx + 1], values[idx + 2], values[idx + 3]).normalize();
+          // delta = q0^-1 * qCur（局部空間相對變化）
+          qDelta.copy(q0Inv).multiply(qCur).normalize();
+          // 限制單一根骨頭最大偏轉角，防止跨骨架軸向差造成對折／反轉
+          const angle = qDelta.angleTo(qIdentity);
+          const maxAngle = 0.85;
+          if (angle > maxAngle && angle > 1e-5) {
+            qDelta.slerp(qIdentity, 1 - maxAngle / angle).normalize();
+          }
+          outValues[idx] = qDelta.x;
+          outValues[idx + 1] = qDelta.y;
+          outValues[idx + 2] = qDelta.z;
+          outValues[idx + 3] = qDelta.w;
+        }
+
+        const safeTrack = new THREE.QuaternionKeyframeTrack(
+          `${targetNode.name}.quaternion`,
+          track.times,
+          outValues
+        );
+        tracks.push(safeTrack);
+      }
+
+      return tracks.length > 0 ? new THREE.AnimationClip(rawClip.name, rawClip.duration, tracks) : null;
+    }
+
+    function rebuildFbxActions() {
+      if (!currentVrm) return;
+      fbxMixer = new THREE.AnimationMixer(currentVrm.scene);
+      activeFbxAction = null;
+      activeFbxSlotKey = null;
+
+      for (const [slotKey, slot] of Object.entries(fbxSlots)) {
+        slot.action = null;
+        if (slot.clip) {
+          const safeClip = buildSafeDeltaClip(slot.clip, currentVrm);
+          if (safeClip) {
+            const action = fbxMixer.clipAction(safeClip);
+            if (slotKey === 'attack' || slotKey === 'dodge') {
+              action.setLoop(THREE.LoopOnce, 1);
+              action.clampWhenFinished = true;
+            } else {
+              action.setLoop(THREE.LoopRepeat, Infinity);
+            }
+            slot.action = action;
+          }
+        }
+      }
+    }
+
+    function playFbxSlot(slotKey, fadeTime = 0.14) {
+      const nextAction = fbxSlots[slotKey]?.action;
+      if (!nextAction) return false;
+      if (activeFbxAction === nextAction && nextAction.isRunning()) {
+        activeFbxSlotKey = slotKey;
+        return true;
+      }
+
+      nextAction.reset();
+      nextAction.setEffectiveTimeScale(1);
+      nextAction.setEffectiveWeight(1);
+      nextAction.play();
+
+      if (activeFbxAction && activeFbxAction !== nextAction) {
+        activeFbxAction.crossFadeTo(nextAction, fadeTime, false);
+      }
+      activeFbxAction = nextAction;
+      activeFbxSlotKey = slotKey;
+      return true;
+    }
+
     const vrmLoader = new GLTFLoader();
     vrmLoader.register((parser) => new VRMLoaderPlugin(parser));
     const fbxLoader = new FBXLoader();
 
-    function probeFbx(slotKey, url) {
+    function loadSingleFbx(slotKey, url) {
       return new Promise((resolve) => {
         fbxLoader.load(
           url,
           (group) => {
             const clip = group.animations?.[0] || null;
-            resolve({
-              slotKey,
-              ok: Boolean(clip),
-              tracks: clip ? clip.tracks.length : 0,
-              sampleBone: clip?.tracks?.[0]?.name?.split('.')?.[0] || '無'
-            });
+            fbxSlots[slotKey].clip = clip;
+            fbxSlots[slotKey].ok = Boolean(clip);
+            fbxSlots[slotKey].tracks = clip ? clip.tracks.length : 0;
+            fbxSlots[slotKey].sampleBone = clip?.tracks?.[0]?.name?.split('.')?.[0] || '無';
+            resolve();
           },
           undefined,
-          (err) => {
-            resolve({
-              slotKey,
-              ok: false,
-              tracks: 0,
-              sampleBone: err?.message ? '載入失敗(404/CORS)' : '載入失敗'
-            });
+          () => {
+            fbxSlots[slotKey].clip = null;
+            fbxSlots[slotKey].ok = false;
+            fbxSlots[slotKey].tracks = 0;
+            fbxSlots[slotKey].sampleBone = '404/錯誤';
+            resolve();
           }
         );
       });
     }
 
-    async function checkGithubFbxConnection() {
-      const results = await Promise.all(
-        Object.entries(GITHUB_FBX_FILES).map(([k, url]) => probeFbx(k, url))
+    async function loadAllGithubFbx() {
+      await Promise.all(
+        Object.entries(GITHUB_FBX_FILES).map(([k, url]) => loadSingleFbx(k, url))
       );
-      const lines = results.map((r) =>
-        `${r.slotKey}: ${r.ok ? `連線OK(${r.tracks}軌, ${r.sampleBone})` : `未連上(${r.sampleBone})`}`
+      rebuildFbxActions();
+
+      const report = Object.entries(fbxSlots).map(([k, s]) =>
+        `${k}:${s.ok ? `OK(${s.tracks}軌,${s.sampleBone})` : `FAIL(${s.sampleBone})`}`
       );
-      fbxReportEl.textContent = lines.join(' | ');
+      fbxReportEl.textContent = report.join(' | ');
     }
-    checkGithubFbxConnection();
+    loadAllGithubFbx();
 
     function disposeObject3D(obj) {
       obj.traverse((node) => {
@@ -384,6 +527,7 @@
           playerVisual.add(vrm.scene);
           currentVrm = vrm;
           attachSwordToRightHand(vrm);
+          rebuildFbxActions();
           setStatus(`狀態：${label} 已載入（${attachedToHand ? '大劍已握於右手' : '使用側掛持劍'}）`);
         },
         undefined,
@@ -466,8 +610,8 @@
       moveInput.z = dy / maxR;
     }
 
-    const DASH_DURATION = 0.25;
-    const ATTACK_DURATION = 0.42;
+    const DASH_DURATION = 0.28;
+    const ATTACK_DURATION = 0.45;
     let dashTimer = 0;
     let attackTimer = 0;
     let walkPhase = 0;
@@ -477,12 +621,14 @@
     function triggerDodge() {
       if (dashTimer > 0) return;
       dashTimer = DASH_DURATION;
-      setStatus('狀態：發動閃避衝刺！');
+      playFbxSlot('dodge', 0.08);
+      setStatus('狀態：發動閃避 (Dodge)！');
     }
 
     function triggerAttack() {
       if (attackTimer > 0) return;
       attackTimer = ATTACK_DURATION;
+      playFbxSlot('attack', 0.08);
 
       const forwardX = -Math.sin(playerRoot.rotation.y);
       const forwardZ = -Math.cos(playerRoot.rotation.y);
@@ -506,7 +652,7 @@
           setStatus('狀態：斬擊命中測試怪！');
         }
       } else {
-        setStatus('狀態：揮舞緋紅晶刃大劍！');
+        setStatus('狀態：發動斬擊 (Sword Slash)！');
       }
     }
 
@@ -530,7 +676,7 @@
       return current + diff * alpha;
     }
 
-    function clampRot(val, limit = 1.35) {
+    function clampRot(val, limit = 1.25) {
       return Math.max(-limit, Math.min(limit, val));
     }
 
@@ -541,106 +687,43 @@
       bone.rotation.z = lerpAngle(bone.rotation.z, clampRot(rz), alpha);
     }
 
-    function applyStablePose(isMoving, delta) {
+    function applyFallbackWhenNoFbx(isMoving, delta) {
       const blend = Math.min(1, delta * 13);
       const breathe = Math.sin(idlePhase);
 
-      playerRoot.position.y = 0;
-      playerVisual.position.set(0, 0, 0);
-      playerVisual.rotation.set(0, 0, 0);
-      slashArc.visible = false;
+      if (!currentVrm || !currentVrm.humanoid) return;
+      const h = currentVrm.humanoid;
+      const hips = h.getNormalizedBoneNode('hips');
+      if (hips) hips.rotation.set(0, 0, 0);
 
-      if (!attachedToHand) {
-        crimsonSword.position.set(-0.46, 0.85, -0.15);
-        crimsonSword.rotation.set(1.25, 0, 0);
-      }
+      const hasActiveClip =
+        (dashTimer > 0 && fbxSlots.dodge.action) ||
+        (attackTimer > 0 && fbxSlots.attack.action) ||
+        (isMoving && fbxSlots.walk.action) ||
+        (!isMoving && fbxSlots.idle.action);
 
-      if (attackTimer > 0) {
-        const p = 1 - attackTimer / ATTACK_DURATION;
-        playerVisual.rotation.y = (0.3 - p) * 0.55;
-        slashArc.visible = p >= 0.2 && p <= 0.68;
-        slashArc.rotation.z = -0.4 + p * 1.4;
-        if (!attachedToHand) {
-          crimsonSword.position.set(-0.25, 1.25 - p * 0.35, -0.55);
-          crimsonSword.rotation.set(-1.2 + p * 2.2, 0, -0.45 + p * 0.9);
-        }
-      } else if (isMoving) {
-        playerVisual.position.y = Math.abs(Math.sin(walkPhase)) * 0.02;
-      }
+      if (hasActiveClip) return;
 
-      if (currentVrm && currentVrm.humanoid) {
-        const h = currentVrm.humanoid;
-        const hips = h.getNormalizedBoneNode('hips');
-        const spine = h.getNormalizedBoneNode('spine');
-        const chest = h.getNormalizedBoneNode('chest');
-        const head = h.getNormalizedBoneNode('head');
-        const lArm = h.getNormalizedBoneNode('leftUpperArm');
-        const rArm = h.getNormalizedBoneNode('rightUpperArm');
-        const lForearm = h.getNormalizedBoneNode('leftLowerArm');
-        const rForearm = h.getNormalizedBoneNode('rightLowerArm');
-        const lLeg = h.getNormalizedBoneNode('leftUpperLeg');
-        const rLeg = h.getNormalizedBoneNode('rightUpperLeg');
-        const lKnee = h.getNormalizedBoneNode('leftLowerLeg');
-        const rKnee = h.getNormalizedBoneNode('rightLowerLeg');
+      const lArm = h.getNormalizedBoneNode('leftUpperArm');
+      const rArm = h.getNormalizedBoneNode('rightUpperArm');
+      const lForearm = h.getNormalizedBoneNode('leftLowerArm');
+      const rForearm = h.getNormalizedBoneNode('rightLowerArm');
+      const lLeg = h.getNormalizedBoneNode('leftUpperLeg');
+      const rLeg = h.getNormalizedBoneNode('rightUpperLeg');
 
-        smoothBoneRot(hips, 0, 0, 0, blend);
-
-        const leftDownZ = -1.2;
-        const rightDownZ = 1.2;
-
-        if (attackTimer > 0) {
-          const p = 1 - attackTimer / ATTACK_DURATION;
-          const swing = p < 0.25 ? -1.1 * (p / 0.25) : -1.1 + ((p - 0.25) / 0.75) * 1.7;
-          smoothBoneRot(spine, 0.05, (0.3 - p) * 0.35, 0, blend);
-          smoothBoneRot(chest, 0.05, 0, 0, blend);
-          smoothBoneRot(head, 0, 0, 0, blend);
-          smoothBoneRot(rArm, swing, 0, rightDownZ * 0.3, blend);
-          smoothBoneRot(rForearm, -0.3, 0, 0, blend);
-          smoothBoneRot(lArm, 0.2, 0, leftDownZ, blend);
-          smoothBoneRot(lForearm, -0.2, 0, 0, blend);
-          smoothBoneRot(lLeg, 0.12, 0, 0, blend);
-          smoothBoneRot(rLeg, -0.12, 0, 0, blend);
-          smoothBoneRot(lKnee, 0.1, 0, 0, blend);
-          smoothBoneRot(rKnee, 0.1, 0, 0, blend);
-        } else if (dashTimer > 0) {
-          smoothBoneRot(spine, 0.08, 0, 0, blend);
-          smoothBoneRot(chest, 0.04, 0, 0, blend);
-          smoothBoneRot(head, 0, 0, 0, blend);
-          smoothBoneRot(lArm, 0.25, 0, leftDownZ, blend);
-          smoothBoneRot(rArm, 0.25, 0, rightDownZ, blend);
-          smoothBoneRot(lForearm, -0.25, 0, 0, blend);
-          smoothBoneRot(rForearm, -0.35, 0, 0, blend);
-          smoothBoneRot(lLeg, -0.22, 0, 0, blend);
-          smoothBoneRot(rLeg, 0.18, 0, 0, blend);
-          smoothBoneRot(lKnee, 0.18, 0, 0, blend);
-          smoothBoneRot(rKnee, 0.12, 0, 0, blend);
-        } else if (isMoving) {
-          const s = Math.sin(walkPhase);
-          const c = Math.cos(walkPhase);
-          smoothBoneRot(lLeg, -s * 0.45, 0, 0, blend);
-          smoothBoneRot(rLeg, s * 0.45, 0, 0, blend);
-          smoothBoneRot(lKnee, Math.max(0, -c) * 0.38, 0, 0, blend);
-          smoothBoneRot(rKnee, Math.max(0, c) * 0.38, 0, 0, blend);
-          smoothBoneRot(lArm, s * 0.32, 0, leftDownZ, blend);
-          smoothBoneRot(rArm, -s * 0.28, 0, rightDownZ, blend);
-          smoothBoneRot(lForearm, -0.2, 0, 0, blend);
-          smoothBoneRot(rForearm, -0.32, 0, 0, blend);
-          smoothBoneRot(spine, 0.03, -s * 0.04, 0, blend);
-          smoothBoneRot(chest, 0, 0, 0, blend);
-          smoothBoneRot(head, 0, 0, 0, blend);
-        } else {
-          smoothBoneRot(lArm, breathe * 0.03, 0, leftDownZ, blend);
-          smoothBoneRot(rArm, -0.14 - breathe * 0.03, 0, rightDownZ, blend);
-          smoothBoneRot(lForearm, -0.16, 0, 0, blend);
-          smoothBoneRot(rForearm, -0.34, 0, 0, blend);
-          smoothBoneRot(spine, breathe * 0.015, 0, 0, blend);
-          smoothBoneRot(chest, breathe * 0.015, 0, 0, blend);
-          smoothBoneRot(head, 0, Math.sin(idlePhase * 0.5) * 0.03, 0, blend);
-          smoothBoneRot(lLeg, 0, 0, 0, blend);
-          smoothBoneRot(rLeg, 0, 0, 0, blend);
-          smoothBoneRot(lKnee, 0, 0, 0, blend);
-          smoothBoneRot(rKnee, 0, 0, 0, blend);
-        }
+      if (isMoving) {
+        const s = Math.sin(walkPhase);
+        smoothBoneRot(lLeg, -s * 0.42, 0, 0, blend);
+        smoothBoneRot(rLeg, s * 0.42, 0, 0, blend);
+        smoothBoneRot(lArm, s * 0.28, 0, -1.2, blend);
+        smoothBoneRot(rArm, -s * 0.25, 0, 1.2, blend);
+      } else {
+        smoothBoneRot(lArm, breathe * 0.03, 0, -1.2, blend);
+        smoothBoneRot(rArm, -0.14 - breathe * 0.03, 0, 1.2, blend);
+        smoothBoneRot(lForearm, -0.16, 0, 0, blend);
+        smoothBoneRot(rForearm, -0.34, 0, 0, blend);
+        smoothBoneRot(lLeg, 0, 0, 0, blend);
+        smoothBoneRot(rLeg, 0, 0, 0, blend);
       }
     }
 
@@ -652,7 +735,7 @@
     let frameCount = 0;
     let fpsTimer = 0;
 
-    setStatus('狀態：就緒（FBX 連線檢查中）');
+    setStatus('狀態：就緒（FBX 動作驅動測試中）');
 
     function animate() {
       requestAnimationFrame(animate);
@@ -688,6 +771,22 @@
         attackTimer = Math.max(0, attackTimer - delta);
       }
 
+      if (dashTimer <= 0 && attackTimer <= 0) {
+        if (isMoving) {
+          if (!playFbxSlot('walk', 0.14)) {
+            playFbxSlot('idle', 0.14);
+          }
+        } else {
+          playFbxSlot('idle', 0.16);
+        }
+      }
+
+      slashArc.visible = attackTimer > 0 && (1 - attackTimer / ATTACK_DURATION) >= 0.2 && (1 - attackTimer / ATTACK_DURATION) <= 0.68;
+      if (slashArc.visible) {
+        const p = 1 - attackTimer / ATTACK_DURATION;
+        slashArc.rotation.z = -0.4 + p * 1.4;
+      }
+
       const distFromCenter = Math.hypot(playerRoot.position.x, playerRoot.position.z);
       if (distFromCenter > 12.8) {
         const ratio = 12.8 / distFromCenter;
@@ -700,42 +799,4 @@
         enemyHitFlash -= delta;
         enemyBody.material.color.setHex(0xef4444);
       } else {
-        enemyBody.material.color.setHex(0x475569);
-      }
-
-      applyStablePose(isMoving, delta);
-      if (currentVrm) currentVrm.update(delta);
-      playerRoot.position.y = 0;
-
-      camera.position.x += (playerRoot.position.x - camera.position.x) * 8 * delta;
-      camera.position.z += (playerRoot.position.z + 6.5 - camera.position.z) * 8 * delta;
-      camera.lookAt(playerRoot.position.x, 1.1, playerRoot.position.z);
-
-      renderer.render(scene, camera);
-
-      frameCount++;
-      fpsTimer += delta;
-      if (fpsTimer >= 1.0) {
-        const fps = Math.round(frameCount / fpsTimer);
-        fpsEl.textContent = fps;
-        fpsEl.className = fps >= 50 ? 'stat-good' : (fps >= 35 ? 'stat-warn' : 'stat-bad');
-        callsEl.textContent = renderer.info.render.calls;
-
-        if (fps < 45 && currentDpr > MIN_DPR) {
-          currentDpr = Math.max(MIN_DPR, +(currentDpr - 0.15).toFixed(2));
-          renderer.setPixelRatio(currentDpr);
-          dprEl.textContent = currentDpr.toFixed(2);
-        } else if (fps >= 56 && currentDpr < MAX_DPR) {
-          currentDpr = Math.min(MAX_DPR, +(currentDpr + 0.05).toFixed(2));
-          renderer.setPixelRatio(currentDpr);
-          dprEl.textContent = currentDpr.toFixed(2);
-        }
-
-        frameCount = 0;
-        fpsTimer = 0;
-      }
-    }
-    animate();
-  </script>
-</body>
-</html>
+        enemyBody.material.color.setHex(0x
