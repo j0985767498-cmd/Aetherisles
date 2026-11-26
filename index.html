@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>雲海群島 - 階段一閃避防陷地與步態測試</title>
+  <title>雲海群島 - 階段一動作與閃避修復</title>
   <style>
     * { box-sizing: border-box; user-select: none; -webkit-user-select: none; margin: 0; padding: 0; }
     html, body { width: 100%; height: 100%; overflow: hidden; background: #000000; font-family: sans-serif; touch-action: none; }
@@ -246,7 +246,7 @@
     }
 
     const playerRoot = new THREE.Group();
-    playerRoot.position.y = 0;
+    playerRoot.position.set(0, 0, 0);
     scene.add(playerRoot);
     playerRoot.add(createBlobShadow(0.65));
 
@@ -415,7 +415,7 @@
       moveInput.z = dy / maxR;
     }
 
-    const DASH_DURATION = 0.26;
+    const DASH_DURATION = 0.24;
     const ATTACK_DURATION = 0.36;
     let dashTimer = 0;
     let attackTimer = 0;
@@ -478,7 +478,7 @@
     }
 
     function applyHumanPose(isMoving) {
-      // 每次都從完全貼地的基準狀態開始，避免閃避或揮砍後往下陷
+      // 每次都鎖定在地面 y = 0
       playerRoot.position.y = 0;
       playerVisual.position.set(0, 0, 0);
       playerVisual.rotation.set(0, 0, 0);
@@ -492,13 +492,14 @@
       const breathe = Math.sin(idlePhase) * 0.02;
 
       if (dashTimer > 0) {
-        // 俐落向前低伏衝刺，不翻滾、不低於地面
-        playerVisual.position.y = 0;
-        playerVisual.rotation.x = -0.14;
+        // 只做微幅輕彈與水平衝刺，不做俯仰旋轉，避免腳底或頭部陷進地板
+        const p = 1 - dashTimer / DASH_DURATION;
+        playerVisual.position.y = Math.sin(p * Math.PI) * 0.08;
+        playerVisual.rotation.set(0, 0, 0);
       } else if (attackTimer > 0) {
         const p = 1 - attackTimer / ATTACK_DURATION;
         playerVisual.position.y = 0;
-        playerVisual.rotation.y = (0.45 - p) * 0.85;
+        playerVisual.rotation.set(0, (0.45 - p) * 0.85, 0);
         slashArc.visible = p < 0.75;
         slashArc.rotation.z = (p - 0.35) * 1.9;
         if (!attachedToHand) {
@@ -529,8 +530,9 @@
 
         [hips, spine, chest, lArm, rArm, lForearm, rForearm, lHand, rHand, lLeg, rLeg, lKnee, rKnee].forEach(resetBone);
 
-        const leftDownZ = -1.15;
-        const rightDownZ = 1.15;
+        // 反轉左右臂 Z 軸方向：若上一版雙手高舉，代表左臂需要 +Z、右臂需要 -Z 才會往下垂
+        const leftDownZ = 1.25;
+        const rightDownZ = -1.25;
 
         if (attackTimer > 0) {
           const p = 1 - attackTimer / ATTACK_DURATION;
@@ -538,7 +540,7 @@
           if (chest) chest.rotation.x = 0.12;
 
           if (rArm) {
-            rArm.rotation.z = 0.35;
+            rArm.rotation.z = -0.35;
             rArm.rotation.x = -1.45 + p * 2.25;
           }
           if (rForearm) rForearm.rotation.x = -0.35;
@@ -550,30 +552,28 @@
           }
           if (lForearm) lForearm.rotation.x = -0.22;
 
-          if (lLeg) lLeg.rotation.x = 0.2;
-          if (rLeg) rLeg.rotation.x = -0.2;
+          if (lLeg) lLeg.rotation.x = 0.18;
+          if (rLeg) rLeg.rotation.x = -0.18;
         } else if (dashTimer > 0) {
-          // 閃避衝刺：微前傾＋雙腿跨步滑行，hips 保持不往下陷
-          if (spine) spine.rotation.x = 0.2;
-          if (hips) hips.position.y = 0;
+          // 閃避衝刺：保持站姿重心不沉入地底，雙腿輕微跨步
+          if (spine) spine.rotation.x = 0.12;
+          if (lArm) { lArm.rotation.z = leftDownZ - 0.1; lArm.rotation.x = 0.3; }
+          if (rArm) { rArm.rotation.z = rightDownZ + 0.1; rArm.rotation.x = 0.3; }
+          if (lForearm) lForearm.rotation.x = -0.3;
+          if (rForearm) rForearm.rotation.x = -0.4;
 
-          if (lArm) { lArm.rotation.z = leftDownZ + 0.12; lArm.rotation.x = 0.35; }
-          if (rArm) { rArm.rotation.z = rightDownZ - 0.12; rArm.rotation.x = 0.35; }
-          if (lForearm) lForearm.rotation.x = -0.35;
-          if (rForearm) rForearm.rotation.x = -0.45;
-
-          if (lLeg) lLeg.rotation.x = -0.42;
-          if (rLeg) rLeg.rotation.x = 0.35;
-          if (lKnee) lKnee.rotation.x = 0.45;
-          if (rKnee) rKnee.rotation.x = 0.25;
+          if (lLeg) lLeg.rotation.x = -0.3;
+          if (rLeg) rLeg.rotation.x = 0.25;
+          if (lKnee) lKnee.rotation.x = 0.25;
+          if (rKnee) rKnee.rotation.x = 0.15;
         } else if (isMoving) {
           const step = Math.sin(walkPhase);
           const stepCos = Math.cos(walkPhase);
 
-          if (lLeg) lLeg.rotation.x = -step * 0.58;
-          if (rLeg) rLeg.rotation.x = step * 0.58;
-          if (lKnee) lKnee.rotation.x = Math.max(0, -stepCos) * 0.5;
-          if (rKnee) rKnee.rotation.x = Math.max(0, stepCos) * 0.5;
+          if (lLeg) lLeg.rotation.x = -step * 0.55;
+          if (rLeg) rLeg.rotation.x = step * 0.55;
+          if (lKnee) lKnee.rotation.x = Math.max(0, -stepCos) * 0.45;
+          if (rKnee) rKnee.rotation.x = Math.max(0, stepCos) * 0.45;
 
           if (lArm) {
             lArm.rotation.z = leftDownZ;
@@ -613,7 +613,7 @@
     let frameCount = 0;
     let fpsTimer = 0;
 
-    setStatus('狀態：就緒（閃避防陷地已修正）');
+    setStatus('狀態：就緒（雙手下垂反轉＋閃避防陷地）');
 
     function animate() {
       requestAnimationFrame(animate);
@@ -666,9 +666,12 @@
       applyHumanPose(isMoving);
       if (currentVrm) currentVrm.update(delta);
 
-      // 最終地面高度保底，確保角色永遠不會陷到地底
+      // 最終地面高度保底
       playerRoot.position.y = 0;
       if (playerVisual.position.y < 0) playerVisual.position.y = 0;
+      if (currentVrm && currentVrm.scene) {
+        currentVrm.scene.position.y = Math.max(0, currentVrm.scene.position.y);
+      }
 
       camera.position.x += (playerRoot.position.x - camera.position.x) * 8 * delta;
       camera.position.z += (playerRoot.position.z + 6.5 - camera.position.z) * 8 * delta;
