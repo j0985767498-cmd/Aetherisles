@@ -193,18 +193,15 @@
       });
       const emeraldMat = new THREE.MeshLambertMaterial({ color: 0x10b981 });
 
-      // 握柄中心在 y = 0
       const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.04, 0.34, 8), crimsonWrapMat);
       grip.position.y = 0;
       sword.add(grip);
 
-      // 劍首紅晶尖錐
       const pommel = new THREE.Mesh(new THREE.ConeGeometry(0.065, 0.18, 4), gemMat);
       pommel.rotation.x = Math.PI;
       pommel.position.y = -0.24;
       sword.add(pommel);
 
-      // 護手底座與中央紅寶石
       const guardBase = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.08, 0.12), goldMat);
       guardBase.position.y = 0.18;
       sword.add(guardBase);
@@ -225,7 +222,6 @@
         sword.add(accent);
       }
 
-      // 雙側分裂式緋紅晶刃
       for (const side of [-1, 1]) {
         const frame = new THREE.Mesh(new THREE.BoxGeometry(0.055, 1.15, 0.035), goldMat);
         frame.position.set(side * 0.11, 0.8, 0);
@@ -257,7 +253,6 @@
     playerRoot.add(playerVisual);
 
     const crimsonSword = createCrimsonCrystalSword();
-    // 預設掛在角色右手側；載入 VRM 後會移至 rightHand 骨頭底下真正「手持」
     crimsonSword.position.set(-0.46, 0.85, -0.15);
     crimsonSword.rotation.set(1.25, 0, 0);
     playerVisual.add(crimsonSword);
@@ -304,7 +299,6 @@
       if (rightHand) {
         if (crimsonSword.parent) crimsonSword.parent.remove(crimsonSword);
         rightHand.add(crimsonSword);
-        // 調整為手掌握住握柄、劍刃朝前方斜指的握持姿態
         crimsonSword.position.set(0, -0.02, -0.04);
         crimsonSword.rotation.set(-Math.PI * 0.42, 0.15, 0);
         attachedToHand = true;
@@ -506,7 +500,6 @@
           crimsonSword.rotation.set(-1.35 + p * 2.4, 0, -0.55 + p * 1.1);
         }
       } else if (isMoving) {
-        // 走路時重心自然微幅上下起伏
         playerVisual.position.y = Math.abs(Math.sin(walkPhase)) * 0.045;
       } else {
         playerVisual.position.y = breathe * 0.3;
@@ -530,8 +523,9 @@
 
         [hips, spine, chest, lArm, rArm, lForearm, rForearm, lHand, rHand, lLeg, rLeg, lKnee, rKnee].forEach(resetBone);
 
-        // 先把雙臂從預設 T-pose 往下放（VRM 正規化骨架中 +Z 往前、+X 往左、+Y 往上，手臂往側下垂需調整 z 軸角度）
-        const baseArmDropZ = 1.15;
+        // VRM 正規化骨架左右對稱：左手往下垂是負 Z，右手往下垂是正 Z
+        const leftDownZ = -1.15;
+        const rightDownZ = 1.15;
 
         if (attackTimer > 0) {
           const p = 1 - attackTimer / ATTACK_DURATION;
@@ -540,7 +534,7 @@
 
           // 右手舉劍由高處向前斜劈
           if (rArm) {
-            rArm.rotation.z = -0.35;
+            rArm.rotation.z = 0.35;
             rArm.rotation.x = -1.45 + p * 2.25;
           }
           if (rForearm) {
@@ -550,9 +544,9 @@
             rHand.rotation.x = 0.25;
           }
 
-          // 左手自然垂放微收保持平衡
+          // 左手自然垂放保持平衡
           if (lArm) {
-            lArm.rotation.z = baseArmDropZ;
+            lArm.rotation.z = leftDownZ;
             lArm.rotation.x = 0.25;
           }
           if (lForearm) lForearm.rotation.x = -0.25;
@@ -563,8 +557,8 @@
           if (spine) spine.rotation.x = 0.25;
           if (hips) hips.position.y = -0.05;
 
-          if (lArm) { lArm.rotation.z = baseArmDropZ - 0.15; lArm.rotation.x = 0.45; }
-          if (rArm) { rArm.rotation.z = -(baseArmDropZ - 0.15); rArm.rotation.x = 0.45; }
+          if (lArm) { lArm.rotation.z = leftDownZ + 0.15; lArm.rotation.x = 0.45; }
+          if (rArm) { rArm.rotation.z = rightDownZ - 0.15; rArm.rotation.x = 0.45; }
           if (lForearm) lForearm.rotation.x = -0.45;
           if (rForearm) rForearm.rotation.x = -0.55;
 
@@ -582,13 +576,13 @@
           if (lKnee) lKnee.rotation.x = Math.max(0, -stepCos) * 0.5;
           if (rKnee) rKnee.rotation.x = Math.max(0, stepCos) * 0.5;
 
-          // 雙手自然下垂，並與對側腳步反向擺動（左腳前 -> 右手前；右腳前 -> 左手前）
+          // 雙手自然下垂，並與對側腳步反向擺動
           if (lArm) {
-            lArm.rotation.z = baseArmDropZ;
+            lArm.rotation.z = leftDownZ;
             lArm.rotation.x = step * 0.42;
           }
           if (rArm) {
-            rArm.rotation.z = -baseArmDropZ;
+            rArm.rotation.z = rightDownZ;
             rArm.rotation.x = -step * 0.35;
           }
           if (lForearm) lForearm.rotation.x = -0.22 - Math.max(0, step) * 0.2;
@@ -601,11 +595,11 @@
         } else {
           // 待機：雙手自然放下來、手肘微彎、輕微呼吸
           if (lArm) {
-            lArm.rotation.z = baseArmDropZ;
+            lArm.rotation.z = leftDownZ;
             lArm.rotation.x = breathe * 0.6;
           }
           if (rArm) {
-            rArm.rotation.z = -baseArmDropZ;
+            rArm.rotation.z = rightDownZ;
             rArm.rotation.x = -0.15 - breathe * 0.6;
           }
           if (lForearm) lForearm.rotation.x = -0.18;
@@ -622,7 +616,7 @@
     let frameCount = 0;
     let fpsTimer = 0;
 
-    setStatus('狀態：就緒（自然垂臂＋交替步態＋手持晶刃大劍）');
+    setStatus('狀態：就緒（雙手已放回下垂＋交替步態＋手持晶刃大劍）');
 
     function animate() {
       requestAnimationFrame(animate);
