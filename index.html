@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>雲海群島 - 階段一重心與手臂姿態除錯</title>
+  <title>雲海群島 - 階段一動作與晶刃大劍測試</title>
   <style>
     * { box-sizing: border-box; user-select: none; -webkit-user-select: none; margin: 0; padding: 0; }
     html, body { width: 100%; height: 100%; overflow: hidden; background: #000000; font-family: sans-serif; touch-action: none; }
@@ -14,16 +14,11 @@
       position: absolute; top: 12px; right: 12px; z-index: 10;
       background: rgba(15, 23, 42, 0.82); color: #e2e8f0;
       padding: 8px 12px; border-radius: 8px; font-size: 12px; line-height: 1.5;
-      border: 1px solid rgba(255,255,255,0.15);
+      border: 1px solid rgba(255,255,255,0.15); pointer-events: none;
     }
     .stat-good { color: #4ade80; font-weight: bold; }
     .stat-warn { color: #facc15; font-weight: bold; }
     .stat-bad  { color: #f87171; font-weight: bold; }
-    #btn-flip-arm {
-      margin-top: 6px; padding: 4px 8px; font-size: 11px; border-radius: 6px;
-      border: 1px solid rgba(255,255,255,0.25); background: #2563eb; color: #fff;
-      cursor: pointer; pointer-events: auto;
-    }
 
     #hud-status {
       position: absolute; top: 12px; left: 12px; z-index: 10;
@@ -79,7 +74,6 @@
       <div>FPS: <span id="stat-fps" class="stat-good">--</span></div>
       <div>渲染倍率: <span id="stat-dpr">1.50</span></div>
       <div>Draw Calls: <span id="stat-calls">0</span></div>
-      <button id="btn-flip-arm" type="button">切換手臂方向: <span id="arm-mode">模式 A</span></button>
     </div>
 
     <div id="joystick-zone"><div id="joystick-knob"></div></div>
@@ -280,13 +274,6 @@
 
     let currentVrm = null;
     let attachedToHand = false;
-    let armModeIndex = 0; // 0: 模式A, 1: 模式B
-
-    document.getElementById('btn-flip-arm').addEventListener('click', () => {
-      armModeIndex = armModeIndex === 0 ? 1 : 0;
-      document.getElementById('arm-mode').textContent = armModeIndex === 0 ? '模式 A' : '模式 B';
-    });
-
     const loader = new GLTFLoader();
     loader.register((parser) => new VRMLoaderPlugin(parser));
 
@@ -481,7 +468,6 @@
     });
     window.addEventListener('keyup', (e) => { keys[e.code] = false; });
 
-    // 重要：只重設 rotation，絕對不改 hips 的 position，避免重心掉進地底
     function resetRotationOnly(bone) {
       if (!bone) return;
       bone.rotation.set(0, 0, 0);
@@ -501,7 +487,8 @@
       const breathe = Math.sin(idlePhase) * 0.02;
 
       if (dashTimer > 0) {
-        playerVisual.position.y = 0;
+        const p = 1 - dashTimer / DASH_DURATION;
+        playerVisual.position.y = Math.sin(p * Math.PI) * 0.06;
         playerVisual.rotation.set(0, 0, 0);
       } else if (attackTimer > 0) {
         const p = 1 - attackTimer / ATTACK_DURATION;
@@ -535,12 +522,11 @@
         const lKnee = h.getNormalizedBoneNode('leftLowerLeg');
         const rKnee = h.getNormalizedBoneNode('rightLowerLeg');
 
-        // 不重置 hips.position，只重設各關節旋轉
         [hips, spine, chest, lArm, rArm, lForearm, rForearm, lHand, rHand, lLeg, rLeg, lKnee, rKnee].forEach(resetRotationOnly);
 
-        // 模式 A：左臂 -1.2 / 右臂 +1.2；模式 B：左臂 +1.2 / 右臂 -1.2
-        const leftDownZ = armModeIndex === 0 ? -1.2 : 1.2;
-        const rightDownZ = armModeIndex === 0 ? 1.2 : -1.2;
+        // 鎖定模式 A
+        const leftDownZ = -1.2;
+        const rightDownZ = 1.2;
 
         if (attackTimer > 0) {
           const p = 1 - attackTimer / ATTACK_DURATION;
@@ -612,7 +598,7 @@
     let frameCount = 0;
     let fpsTimer = 0;
 
-    setStatus('狀態：就緒（已保留 hips 高度，右上角可切換手臂方向）');
+    setStatus('狀態：就緒（模式 A 已鎖定）');
 
     function animate() {
       requestAnimationFrame(animate);
