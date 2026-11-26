@@ -2,58 +2,110 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>雲海群島 - FBX 單次動作鎖定測試</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>雲海群島 - 橫向 7 鍵與戰鬥機制測試版</title>
   <style>
-    * { box-sizing: border-box; user-select: none; -webkit-user-select: none; margin: 0; padding: 0; }
+    * { box-sizing: border-box; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; margin: 0; padding: 0; }
     html, body { width: 100%; height: 100%; overflow: hidden; background: #000000; font-family: sans-serif; touch-action: none; }
     #canvas-container { width: 100%; height: 100%; position: relative; }
     canvas { display: block; width: 100%; height: 100%; }
 
+    /* 橫向主 HUD（左上：戰鬥數值與 VRM 載入） */
+    #hud-combat {
+      position: absolute; top: 10px; left: 10px; z-index: 12;
+      background: rgba(15, 23, 42, 0.86); color: #e2e8f0;
+      padding: 8px 11px; border-radius: 10px; font-size: 11.5px; line-height: 1.45;
+      border: 1px solid rgba(255,255,255,0.16); max-width: 44vw; pointer-events: auto;
+    }
+    .bar-row { display: flex; align-items: center; gap: 6px; margin-top: 3px; }
+    .bar-label { width: 58px; color: #cbd5e1; font-size: 11px; }
+    .bar-track { flex: 1; height: 7px; background: rgba(255,255,255,0.14); border-radius: 999px; overflow: hidden; min-width: 72px; }
+    .bar-fill-sharp { height: 100%; background: #38bdf8; width: 100%; transition: width 0.12s; }
+    .bar-fill-heat  { height: 100%; background: #f97316; width: 0%; transition: width 0.12s; }
+    .bar-val { width: 42px; text-align: right; font-size: 11px; font-weight: bold; }
+
+    #hud-status-line {
+      margin-top: 5px; font-size: 11px; color: #fde68a; word-break: break-word;
+    }
+    .file-row { margin-top: 5px; display: flex; align-items: center; gap: 6px; font-size: 10.5px; color: #93c5fd; }
+    .file-row input { max-width: 150px; font-size: 10.5px; color: #93c5fd; }
+
+    /* 中上：橫向提示與一鍵全螢幕/鎖定橫向 */
+    #orientation-bar {
+      position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 15;
+      background: rgba(2, 132, 199, 0.9); color: #fff;
+      padding: 5px 10px; border-radius: 999px; font-size: 11px;
+      display: flex; align-items: center; gap: 8px; white-space: nowrap;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.35);
+    }
+    #btn-landscape-go {
+      background: #fff; color: #0f172a; border: none; border-radius: 999px;
+      padding: 2px 8px; font-size: 10.5px; font-weight: bold; cursor: pointer;
+    }
+
+    /* 右上：效能監控 + 6、7 號功能鍵 */
+    #hud-top-right {
+      position: absolute; top: 10px; right: 10px; z-index: 12;
+      display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
+    }
     #hud-stats {
-      position: absolute; top: 12px; right: 12px; z-index: 10;
-      background: rgba(15, 23, 42, 0.85); color: #e2e8f0;
-      padding: 8px 12px; border-radius: 8px; font-size: 12px; line-height: 1.5;
-      border: 1px solid rgba(255,255,255,0.15); pointer-events: none; max-width: 45vw;
+      background: rgba(15, 23, 42, 0.82); color: #e2e8f0;
+      padding: 6px 10px; border-radius: 8px; font-size: 11px; line-height: 1.4;
+      border: 1px solid rgba(255,255,255,0.15); pointer-events: none; text-align: right;
     }
     .stat-good { color: #4ade80; font-weight: bold; }
     .stat-warn { color: #facc15; font-weight: bold; }
     .stat-bad  { color: #f87171; font-weight: bold; }
 
-    #hud-status {
-      position: absolute; top: 12px; left: 12px; z-index: 10;
-      background: rgba(15, 23, 42, 0.9); color: #cbd5e1;
-      padding: 8px 12px; border-radius: 8px; font-size: 12px; max-width: 52vw;
-      border: 1px solid rgba(255,255,255,0.15); word-break: break-word; line-height: 1.45;
+    #util-keys {
+      display: flex; gap: 8px;
     }
-    .file-row { margin-top: 6px; font-size: 11px; color: #93c5fd; }
-    .file-row label { display: block; margin-bottom: 2px; color: #cbd5e1; }
-    .file-row input { display: block; max-width: 100%; font-size: 11px; color: #93c5fd; }
 
+    /* 左下：移動搖桿 */
     #joystick-zone {
-      position: absolute; bottom: 28px; left: 28px; z-index: 10;
-      width: 110px; height: 110px; border-radius: 50%;
-      background: rgba(255, 255, 255, 0.14); border: 2px solid rgba(255, 255, 255, 0.3);
+      position: absolute; bottom: 22px; left: 22px; z-index: 12;
+      width: 112px; height: 112px; border-radius: 50%;
+      background: rgba(255, 255, 255, 0.14); border: 2px solid rgba(255, 255, 255, 0.32);
     }
     #joystick-knob {
       position: absolute; top: 50%; left: 50%;
       width: 44px; height: 44px; margin: -22px 0 0 -22px;
-      border-radius: 50%; background: rgba(255, 255, 255, 0.7);
+      border-radius: 50%; background: rgba(255, 255, 255, 0.72);
       pointer-events: none;
     }
 
-    #action-buttons {
-      position: absolute; bottom: 28px; right: 28px; z-index: 10;
-      display: flex; gap: 14px; align-items: flex-end;
+    /* 右下：7 鍵中的 1～5 號戰鬥與戰術鍵（弧形／分層擺放） */
+    #combat-keys {
+      position: absolute; bottom: 20px; right: 20px; z-index: 12;
+      width: 230px; height: 156px; pointer-events: none;
     }
-    .btn-action {
-      border-radius: 50%; border: 2px solid rgba(255,255,255,0.35);
-      color: #fff; font-weight: bold; display: flex; align-items: center; justify-content: center;
-      background: rgba(30, 41, 59, 0.85); cursor: pointer; touch-action: manipulation;
+    .key-btn {
+      pointer-events: auto;
+      position: absolute; border-radius: 50%;
+      border: 2px solid rgba(255, 255, 255, 0.35);
+      color: #fff; font-weight: bold;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      background: rgba(30, 41, 59, 0.88); cursor: pointer; touch-action: manipulation;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.35); line-height: 1.15;
     }
-    .btn-action:active { transform: scale(0.9); }
-    #btn-dodge { width: 64px; height: 64px; font-size: 13px; background: rgba(2, 132, 199, 0.8); }
-    #btn-attack { width: 80px; height: 80px; font-size: 15px; background: rgba(220, 38, 38, 0.82); }
+    .key-btn:active, .key-btn.active { transform: scale(0.92); filter: brightness(1.2); }
+    .key-sub { font-size: 9.5px; opacity: 0.85; font-weight: normal; margin-top: 1px; }
+
+    /* 高頻主區：1 輕斬、2 重擊、3 閃避 */
+    #key-1 { width: 76px; height: 76px; right: 4px; bottom: 4px; font-size: 14px; background: rgba(220, 38, 38, 0.88); }
+    #key-2 { width: 62px; height: 62px; right: 88px; bottom: 8px; font-size: 12.5px; background: rgba(217, 119, 6, 0.88); }
+    #key-3 { width: 62px; height: 62px; right: 6px; bottom: 88px; font-size: 12.5px; background: rgba(2, 132, 199, 0.88); }
+
+    /* 中頻戰術區：4 解放/冷卻、5 格擋 */
+    #key-4 { width: 54px; height: 54px; right: 158px; bottom: 16px; font-size: 11px; background: rgba(147, 51, 234, 0.86); }
+    #key-5 { width: 54px; height: 54px; right: 76px; bottom: 78px; font-size: 11.5px; background: rgba(15, 118, 110, 0.88); }
+
+    /* 右上功能區：6 鎖定、7 負重切換 */
+    #key-6, #key-7 {
+      position: static; width: 56px; height: 42px; border-radius: 10px;
+      font-size: 11px; background: rgba(30, 41, 59, 0.9);
+    }
+    #key-6.locked { border-color: #facc15; color: #fde047; }
   </style>
   <script type="importmap">
     {
@@ -67,44 +119,65 @@
 </head>
 <body>
   <div id="canvas-container">
-    <div id="hud-status">
-      <div id="status-text">狀態：初始化中...</div>
-      <div id="fbx-report" style="margin-top:4px;font-size:11px;color:#fde68a;">FBX 連線檢查中...</div>
+    <div id="hud-combat">
+      <div><strong>雲海群島｜橫向 7 鍵＆戰鬥測試</strong></div>
+      <div class="bar-row">
+        <span class="bar-label">鋒利度</span>
+        <div class="bar-track"><div id="bar-sharp" class="bar-fill-sharp"></div></div>
+        <span id="val-sharp" class="bar-val">100</span>
+      </div>
+      <div class="bar-row">
+        <span class="bar-label">晶刃熱度</span>
+        <div class="bar-track"><div id="bar-heat" class="bar-fill-heat"></div></div>
+        <span id="val-heat" class="bar-val">0</span>
+      </div>
+      <div id="hud-status-line">
+        負重: <span id="val-weight" style="color:#4ade80;font-weight:bold;">輕裝</span> ｜
+        角晶耐久: <span id="val-horn" style="color:#fbbf24;font-weight:bold;">6</span>
+      </div>
+      <div id="status-text" style="margin-top:3px;font-size:11px;color:#cbd5e1;">狀態：初始化中...</div>
       <div class="file-row">
-        <label for="vrm-upload">VRM 角色檔：</label>
+        <label for="vrm-upload">VRM：</label>
         <input type="file" id="vrm-upload" accept=".vrm" />
       </div>
     </div>
 
-    <div id="hud-stats">
-      <div>FPS: <span id="stat-fps" class="stat-good">--</span></div>
-      <div>渲染倍率: <span id="stat-dpr">1.50</span></div>
-      <div>Draw Calls: <span id="stat-calls">0</span></div>
-      <div>目前動作: <span id="stat-cur-anim" class="stat-good">內建待機</span></div>
+    <div id="orientation-bar">
+      <span id="orientation-msg">建議橫向遊玩以獲得最佳 7 鍵視野</span>
+      <button id="btn-landscape-go" type="button">進入橫向全螢幕</button>
+    </div>
+
+    <div id="hud-top-right">
+      <div id="hud-stats">
+        <div>FPS: <span id="stat-fps" class="stat-good">--</span></div>
+        <div>DPR: <span id="stat-dpr">1.50</span> | Calls: <span id="stat-calls">0</span></div>
+        <div>姿態: <span class="stat-good">防翻轉穩定</span></div>
+      </div>
+      <div id="util-keys">
+        <div id="key-6" class="key-btn" role="button">鎖定<span class="key-sub">[6 / O]</span></div>
+        <div id="key-7" class="key-btn" role="button">負重<span class="key-sub">[7 / P]</span></div>
+      </div>
     </div>
 
     <div id="joystick-zone"><div id="joystick-knob"></div></div>
-    <div id="action-buttons">
-      <div id="btn-dodge" class="btn-action" role="button">閃避</div>
-      <div id="btn-attack" class="btn-action" role="button">斬擊</div>
+
+    <div id="combat-keys">
+      <div id="key-4" class="key-btn" role="button">解放<span class="key-sub">[4 / I]</span></div>
+      <div id="key-5" class="key-btn" role="button">格擋<span class="key-sub">[5 / L]</span></div>
+      <div id="key-2" class="key-btn" role="button">重擊<span class="key-sub">[2 / U]</span></div>
+      <div id="key-3" class="key-btn" role="button">閃避<span class="key-sub">[3 / K]</span></div>
+      <div id="key-1" class="key-btn" role="button">輕斬<span class="key-sub">[1 / J]</span></div>
     </div>
   </div>
 
   <script type="module">
-    const GITHUB_FBX_FILES = {
-      idle: './Idle.fbx',
-      walk: './Walking.fbx',
-      attack: './Sword%20Slash.fbx',
-      dodge: './Dodge.fbx'
-    };
-
     const statusEl = document.getElementById('status-text');
-    const fbxReportEl = document.getElementById('fbx-report');
-    const curAnimEl = document.getElementById('stat-cur-anim');
+    const orientationMsgEl = document.getElementById('orientation-msg');
+    const btnLandscapeGo = document.getElementById('btn-landscape-go');
 
     function setStatus(msg, isError = false) {
       statusEl.textContent = msg;
-      statusEl.style.color = isError ? '#fca5a5' : '#e2e8f0';
+      statusEl.style.color = isError ? '#fca5a5' : '#cbd5e1';
     }
 
     window.addEventListener('error', (event) => {
@@ -114,9 +187,50 @@
       setStatus(`非同步錯誤：${event.reason?.message || event.reason}`, true);
     });
 
+    // 自動橫向嘗試（不強制報錯，支援瀏覽器全螢幕與方向鎖定 API 時自動請求）
+    let orientationAttempted = false;
+    async function tryEnterLandscapeMode(fromUserGesture = false) {
+      if (!fromUserGesture && orientationAttempted) return;
+      orientationAttempted = true;
+      try {
+        if (fromUserGesture && document.documentElement.requestFullscreen && !document.fullscreenElement) {
+          await document.documentElement.requestFullscreen().catch(() => {});
+        }
+        if (screen.orientation && typeof screen.orientation.lock === 'function') {
+          await screen.orientation.lock('landscape').catch(() => {});
+        }
+      } catch (_) {
+        // 部分手機瀏覽器或 iOS Safari 限制程式鎖定螢幕方向，安全略過
+      }
+      refreshOrientationHint();
+    }
+
+    function refreshOrientationHint() {
+      const isPortrait = window.innerHeight > window.innerWidth;
+      const isLandscapeLock = screen.orientation?.type?.startsWith('landscape');
+      if (isPortrait) {
+        orientationMsgEl.textContent = '目前為直立畫面：建議轉橫向或點右側進入橫向';
+        btnLandscapeGo.style.display = 'inline-block';
+      } else if (isLandscapeLock) {
+        orientationMsgEl.textContent = '橫向模式已啟用（7 鍵佈局）';
+        btnLandscapeGo.style.display = 'none';
+      } else {
+        orientationMsgEl.textContent = '橫向模式就緒（點擊畫面可嘗試全螢幕）';
+        btnLandscapeGo.style.display = document.fullscreenElement ? 'none' : 'inline-block';
+      }
+    }
+
+    btnLandscapeGo.addEventListener('click', (e) => {
+      e.stopPropagation();
+      tryEnterLandscapeMode(true);
+    });
+    window.addEventListener('pointerdown', () => {
+      tryEnterLandscapeMode(true);
+    }, { once: true });
+    window.addEventListener('orientationchange', refreshOrientationHint);
+
     import * as THREE from 'three';
     import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-    import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
     import { VRMLoaderPlugin } from '@pixiv/three-vrm';
 
     const container = document.getElementById('canvas-container');
@@ -153,6 +267,7 @@
       camera.updateProjectionMatrix();
       renderer.setPixelRatio(currentDpr);
       renderer.setSize(w, h, false);
+      refreshOrientationHint();
     }
     syncRendererSize();
     window.addEventListener('resize', syncRendererSize);
@@ -275,7 +390,7 @@
     playerVisual.add(crimsonSword);
 
     const slashArc = new THREE.Mesh(
-      new THREE.RingGeometry(0.85, 1.45, 18, 1, -Math.PI * 0.45, Math.PI * 0.9),
+      new THREE.RingGeometry(0.85, 1.55, 18, 1, -Math.PI * 0.45, Math.PI * 0.9),
       new THREE.MeshBasicMaterial({ color: 0xfca5a5, side: THREE.DoubleSide, transparent: true, opacity: 0.85 })
     );
     slashArc.rotation.x = Math.PI / 2;
@@ -292,178 +407,8 @@
 
     let currentVrm = null;
     let attachedToHand = false;
-    let fbxMixer = null;
-
-    const fbxSlots = {
-      idle: { clip: null, action: null, duration: 0, ok: false, tracks: 0, sampleBone: '無' },
-      walk: { clip: null, action: null, duration: 0, ok: false, tracks: 0, sampleBone: '無' },
-      attack: { clip: null, action: null, duration: 0, ok: false, tracks: 0, sampleBone: '無' },
-      dodge: { clip: null, action: null, duration: 0, ok: false, tracks: 0, sampleBone: '無' }
-    };
-    let activeFbxAction = null;
-    let lockedSlotKey = null; // 單次動作鎖定：'attack' 或 'dodge'
-
-    const BONE_ALIASES = {
-      hips: ['hips', 'pelvis', 'mixamorighips'],
-      spine: ['spine', 'mixamorigspine'],
-      chest: ['chest', 'spine1', 'spine2', 'upperchest', 'mixamorigspine1', 'mixamorigspine2'],
-      neck: ['neck', 'mixamorigneck'],
-      head: ['head', 'mixamorighead'],
-      leftShoulder: ['leftshoulder', 'shoulder_l', 'mixamorigleftshoulder'],
-      rightShoulder: ['rightshoulder', 'shoulder_r', 'mixamorigrightshoulder'],
-      leftUpperArm: ['leftupperarm', 'leftarm', 'upperarm_l', 'mixamorigleftarm'],
-      rightUpperArm: ['rightupperarm', 'rightarm', 'upperarm_r', 'mixamorigrightarm'],
-      leftLowerArm: ['leftlowerarm', 'leftforearm', 'lowerarm_l', 'mixamorigleftforearm'],
-      rightLowerArm: ['rightlowerarm', 'rightforearm', 'lowerarm_r', 'mixamorigrightforearm'],
-      leftHand: ['lefthand', 'hand_l', 'mixamoriglefthand'],
-      rightHand: ['righthand', 'hand_r', 'mixamorigrighthand'],
-      leftUpperLeg: ['leftupperleg', 'leftupleg', 'thigh_l', 'mixamorigleftupleg'],
-      rightUpperLeg: ['rightupperleg', 'rightupleg', 'thigh_r', 'mixamorigrightupleg'],
-      leftLowerLeg: ['leftlowerleg', 'leftleg', 'calf_l', 'mixamorigleftleg'],
-      rightLowerLeg: ['rightlowerleg', 'rightleg', 'calf_r', 'mixamorigrightleg'],
-      leftFoot: ['leftfoot', 'foot_l', 'mixamorigleftfoot'],
-      rightFoot: ['rightfoot', 'foot_r', 'mixamorigrightfoot']
-    };
-
-    function mapBoneName(rawBone) {
-      if (!rawBone) return null;
-      const tail = rawBone.split(/[|:]/).pop() || rawBone;
-      const clean = tail.replace(/^mixamorig/i, '').replace(/[\s_-]/g, '').toLowerCase();
-      for (const [vrmBone, aliases] of Object.entries(BONE_ALIASES)) {
-        if (aliases.includes(clean)) return vrmBone;
-      }
-      return null;
-    }
-
-    function buildSafeDeltaClip(rawClip, vrm) {
-      if (!rawClip || !vrm?.humanoid) return null;
-      const tracks = [];
-
-      for (const track of rawClip.tracks) {
-        if (!track.name.endsWith('.quaternion')) continue;
-        const rawBone = track.name.slice(0, -'.quaternion'.length);
-        const vrmBone = mapBoneName(rawBone);
-        if (!vrmBone || vrmBone === 'hips') continue;
-
-        const targetNode = vrm.humanoid.getNormalizedBoneNode(vrmBone);
-        if (!targetNode || !targetNode.name) continue;
-
-        const values = track.values;
-        const count = values.length / 4;
-        if (count < 1) continue;
-
-        const q0 = new THREE.Quaternion(values[0], values[1], values[2], values[3]).normalize();
-        const q0Inv = q0.clone().invert();
-        const qCur = new THREE.Quaternion();
-        const qDelta = new THREE.Quaternion();
-        const qIdentity = new THREE.Quaternion();
-        const outValues = new Float32Array(values.length);
-
-        for (let i = 0; i < count; i++) {
-          const idx = i * 4;
-          qCur.set(values[idx], values[idx + 1], values[idx + 2], values[idx + 3]).normalize();
-          qDelta.copy(q0Inv).multiply(qCur).normalize();
-          const angle = qDelta.angleTo(qIdentity);
-          const maxAngle = 1.05;
-          if (angle > maxAngle && angle > 1e-5) {
-            qDelta.slerp(qIdentity, 1 - maxAngle / angle).normalize();
-          }
-          outValues[idx] = qDelta.x;
-          outValues[idx + 1] = qDelta.y;
-          outValues[idx + 2] = qDelta.z;
-          outValues[idx + 3] = qDelta.w;
-        }
-
-        tracks.push(new THREE.QuaternionKeyframeTrack(`${targetNode.name}.quaternion`, track.times, outValues));
-      }
-
-      return tracks.length > 0 ? new THREE.AnimationClip(rawClip.name, rawClip.duration, tracks) : null;
-    }
-
-    function rebuildFbxActions() {
-      if (!currentVrm) return;
-      fbxMixer = new THREE.AnimationMixer(currentVrm.scene);
-      activeFbxAction = null;
-      lockedSlotKey = null;
-
-      for (const [slotKey, slot] of Object.entries(fbxSlots)) {
-        slot.action = null;
-        slot.duration = slot.clip?.duration || 0;
-        if (slot.clip) {
-          const safeClip = buildSafeDeltaClip(slot.clip, currentVrm);
-          if (safeClip) {
-            const action = fbxMixer.clipAction(safeClip);
-            if (slotKey === 'attack' || slotKey === 'dodge') {
-              action.setLoop(THREE.LoopOnce, 1);
-              action.clampWhenFinished = true;
-            } else {
-              action.setLoop(THREE.LoopRepeat, Infinity);
-            }
-            slot.action = action;
-          }
-        }
-      }
-    }
-
-    function playFbxSlot(slotKey, fadeTime = 0.12) {
-      const nextAction = fbxSlots[slotKey]?.action;
-      if (!nextAction) return false;
-      if (activeFbxAction === nextAction && nextAction.isRunning() && slotKey !== 'attack' && slotKey !== 'dodge') {
-        return true;
-      }
-
-      nextAction.reset();
-      nextAction.setEffectiveTimeScale(1);
-      nextAction.setEffectiveWeight(1);
-      nextAction.play();
-
-      if (activeFbxAction && activeFbxAction !== nextAction) {
-        activeFbxAction.crossFadeTo(nextAction, fadeTime, false);
-      }
-      activeFbxAction = nextAction;
-      return true;
-    }
-
     const vrmLoader = new GLTFLoader();
     vrmLoader.register((parser) => new VRMLoaderPlugin(parser));
-    const fbxLoader = new FBXLoader();
-
-    function loadSingleFbx(slotKey, url) {
-      return new Promise((resolve) => {
-        fbxLoader.load(
-          url,
-          (group) => {
-            const clip = group.animations?.[0] || null;
-            fbxSlots[slotKey].clip = clip;
-            fbxSlots[slotKey].ok = Boolean(clip);
-            fbxSlots[slotKey].tracks = clip ? clip.tracks.length : 0;
-            fbxSlots[slotKey].sampleBone = clip?.tracks?.[0]?.name?.split('.')?.[0] || '無';
-            resolve();
-          },
-          undefined,
-          () => {
-            fbxSlots[slotKey].clip = null;
-            fbxSlots[slotKey].ok = false;
-            fbxSlots[slotKey].tracks = 0;
-            fbxSlots[slotKey].sampleBone = '404/錯誤';
-            resolve();
-          }
-        );
-      });
-    }
-
-    async function loadAllGithubFbx() {
-      await Promise.all(
-        Object.entries(GITHUB_FBX_FILES).map(([k, url]) => loadSingleFbx(k, url))
-      );
-      rebuildFbxActions();
-
-      const report = Object.entries(fbxSlots).map(([k, s]) =>
-        `${k}:${s.ok ? `OK(${s.tracks}軌,${s.duration.toFixed(1)}s)` : `FAIL(${s.sampleBone})`}`
-      );
-      fbxReportEl.textContent = report.join(' | ');
-    }
-    loadAllGithubFbx();
 
     function disposeObject3D(obj) {
       obj.traverse((node) => {
@@ -498,7 +443,7 @@
     }
 
     function loadVRMFromUrl(url, label = 'model 4.vrm') {
-      setStatus(`狀態：正在載入 ${label}...`);
+      setStatus(`狀態：載入 ${label}...`);
       vrmLoader.load(
         url,
         (gltf) => {
@@ -518,13 +463,12 @@
           playerVisual.add(vrm.scene);
           currentVrm = vrm;
           attachSwordToRightHand(vrm);
-          rebuildFbxActions();
-          setStatus(`狀態：${label} 已載入（${attachedToHand ? '大劍已握於右手' : '使用側掛持劍'}）`);
+          setStatus(`狀態：${label} 已就緒`);
         },
         undefined,
         (err) => {
           console.error(err);
-          setStatus(`載入 ${label} 失敗：${err?.message || '請確認路徑'}`, true);
+          setStatus(`VRM 載入失敗（使用替身底盤）：${err?.message || '離線或路徑未放檔'}`, false);
         }
       );
     }
@@ -537,10 +481,11 @@
       loadVRMFromUrl(URL.createObjectURL(file), file.name);
     });
 
+    // 敵人與可破壞角晶部位
     const enemyRoot = new THREE.Group();
     enemyRoot.position.set(0, 0, -4.5);
     scene.add(enemyRoot);
-    enemyRoot.add(createBlobShadow(1.1));
+    enemyRoot.add(createBlobShadow(1.15));
 
     const enemyBody = new THREE.Mesh(
       new THREE.DodecahedronGeometry(1.0, 0),
@@ -550,24 +495,82 @@
     enemyRoot.add(enemyBody);
 
     const hornMat = new THREE.MeshLambertMaterial({ color: 0xf59e0b });
-    const enemyHorn = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.9, 6), hornMat);
+    const enemyHorn = new THREE.Mesh(new THREE.ConeGeometry(0.36, 0.95, 6), hornMat);
     enemyHorn.position.set(0, 2.25, 0.2);
     enemyRoot.add(enemyHorn);
 
-    let hornHp = 3;
+    const lockRing = new THREE.Mesh(
+      new THREE.RingGeometry(1.35, 1.55, 24),
+      new THREE.MeshBasicMaterial({ color: 0xfacc15, side: THREE.DoubleSide, transparent: true, opacity: 0.85 })
+    );
+    lockRing.rotation.x = -Math.PI / 2;
+    lockRing.position.y = 0.03;
+    lockRing.visible = false;
+    enemyRoot.add(lockRing);
+
+    // 戰鬥數值狀態（鋒利度、熱度、負重、部位破壞）
+    const WEIGHT_TIERS = [
+      { id: 'light',  label: '輕裝', moveMult: 1.15, dashSpeed: 13.0, dashCd: 0.45, guardPush: 0.25, color: '#4ade80' },
+      { id: 'medium', label: '中裝', moveMult: 1.00, dashSpeed: 11.2, dashCd: 0.62, guardPush: 0.14, color: '#facc15' },
+      { id: 'heavy',  label: '重裝', moveMult: 0.80, dashSpeed: 9.0,  dashCd: 0.85, guardPush: 0.05, color: '#f87171' }
+    ];
+
+    const combat = {
+      sharpness: 100,   // 0 ~ 100
+      heat: 0,          // 0 ~ 100
+      weightIdx: 0,     // 0: 輕裝, 1: 中裝, 2: 重裝
+      hornHp: 6,        // 部位耐久
+      hornBroken: false,
+      lockedTarget: false,
+      guarding: false,
+      dodgeCooldown: 0
+    };
+
     let enemyHitFlash = 0;
 
+    const barSharp = document.getElementById('bar-sharp');
+    const barHeat = document.getElementById('bar-heat');
+    const valSharp = document.getElementById('val-sharp');
+    const valHeat = document.getElementById('val-heat');
+    const valWeight = document.getElementById('val-weight');
+    const valHorn = document.getElementById('val-horn');
+
+    function syncCombatHud() {
+      const s = Math.max(0, Math.min(100, Math.round(combat.sharpness)));
+      const h = Math.max(0, Math.min(100, Math.round(combat.heat)));
+      barSharp.style.width = `${s}%`;
+      barHeat.style.width = `${h}%`;
+      valSharp.textContent = s;
+      valHeat.textContent = h;
+
+      const tier = WEIGHT_TIERS[combat.weightIdx];
+      valWeight.textContent = tier.label;
+      valWeight.style.color = tier.color;
+
+      if (combat.hornBroken) {
+        valHorn.textContent = '已破壞';
+        valHorn.style.color = '#f87171';
+      } else {
+        valHorn.textContent = `${combat.hornHp}`;
+        valHorn.style.color = '#fbbf24';
+      }
+    }
+    syncCombatHud();
+
+    // 搖桿輸入
     const moveInput = { x: 0, z: 0 };
     const joyZone = document.getElementById('joystick-zone');
     const joyKnob = document.getElementById('joystick-knob');
     let joyTouchId = null;
 
     joyZone.addEventListener('touchstart', (e) => {
+      e.stopPropagation();
       const touch = e.changedTouches[0];
       joyTouchId = touch.identifier;
       updateJoystick(touch);
     });
     joyZone.addEventListener('touchmove', (e) => {
+      e.stopPropagation();
       for (const touch of e.changedTouches) {
         if (touch.identifier === joyTouchId) updateJoystick(touch);
       }
@@ -601,68 +604,179 @@
       moveInput.z = dy / maxR;
     }
 
-    const DEFAULT_DODGE_DURATION = 0.35;
-    const DEFAULT_ATTACK_DURATION = 0.48;
+    // 單次動作鎖定狀態機
+    const ATTACK_LIGHT_DUR = 0.34;
+    const ATTACK_HEAVY_DUR = 0.52;
+    const RELEASE_DUR = 0.44;
+    let actionLock = null; // null | 'light' | 'heavy' | 'dodge' | 'release'
+    let actionTimer = 0;
+    let actionDuration = 0;
     let dashTimer = 0;
-    let attackTimer = 0;
     let walkPhase = 0;
     let idlePhase = 0;
     let targetYaw = 0;
 
-    function triggerDodge() {
-      if (lockedSlotKey) return;
-      const clipDur = fbxSlots.dodge.duration || 0;
-      dashTimer = clipDur > 0 ? Math.min(clipDur, 1.2) : DEFAULT_DODGE_DURATION;
-      lockedSlotKey = 'dodge';
-      playFbxSlot('dodge', 0.08);
-      setStatus(`狀態：發動閃避 (Dodge)${fbxSlots.dodge.action ? ' [FBX]' : ' [內建]'}！`);
+    function getSharpnessMult() {
+      if (combat.sharpness >= 70) return 1.15;
+      if (combat.sharpness >= 35) return 1.0;
+      return 0.72; // 鈍刃降傷
     }
 
-    function triggerAttack() {
-      if (lockedSlotKey) return;
-      const clipDur = fbxSlots.attack.duration || 0;
-      attackTimer = clipDur > 0 ? Math.min(clipDur, 1.4) : DEFAULT_ATTACK_DURATION;
-      lockedSlotKey = 'attack';
-      playFbxSlot('attack', 0.08);
-
-      const forwardX = -Math.sin(playerRoot.rotation.y);
-      const forwardZ = -Math.cos(playerRoot.rotation.y);
-      playerRoot.position.x += forwardX * 0.42;
-      playerRoot.position.z += forwardZ * 0.42;
-
+    function applyHitToEnemy(basePartDamage, label) {
       const dist = playerRoot.position.distanceTo(enemyRoot.position);
-      if (dist < 3.6) {
-        enemyHitFlash = 0.18;
-        if (hornHp > 0) {
-          hornHp--;
-          if (hornHp === 0) {
-            enemyRoot.remove(enemyHorn);
-            enemyHorn.geometry.dispose();
-            hornMat.dispose();
-            setStatus('狀態：斬擊命中！角晶已破壞');
-          } else {
-            setStatus(`狀態：斬擊命中！角晶剩餘 ${hornHp} 次`);
-          }
+      if (dist > 3.85) {
+        setStatus(`狀態：${label}（揮空）`);
+        return;
+      }
+      enemyHitFlash = 0.16;
+      const sharpMult = getSharpnessMult();
+      const heatBonus = 1 + (combat.heat / 100) * 0.45;
+      const totalPartDmg = basePartDamage * sharpMult * heatBonus;
+
+      if (!combat.hornBroken) {
+        combat.hornHp = Math.max(0, +(combat.hornHp - totalPartDmg).toFixed(1));
+        if (combat.hornHp <= 0) {
+          combat.hornBroken = true;
+          if (enemyHorn.parent) enemyRoot.remove(enemyHorn);
+          enemyHorn.geometry.dispose();
+          hornMat.dispose();
+          setStatus(`狀態：${label} 命中！角晶部位破壞！`);
         } else {
-          setStatus('狀態：斬擊命中測試怪！');
+          setStatus(`狀態：${label} 命中！角晶耐久 ${combat.hornHp.toFixed(1)}`);
         }
       } else {
-        setStatus(`狀態：發動斬擊 (Sword Slash)${fbxSlots.attack.action ? ' [FBX]' : ' [內建]'}！`);
+        setStatus(`狀態：${label} 命中目標（角晶已破壞）`);
+      }
+      syncCombatHud();
+    }
+
+    // 鍵 1：輕斬
+    function triggerLightAttack() {
+      if (actionLock) return;
+      actionLock = 'light';
+      actionDuration = ATTACK_LIGHT_DUR;
+      actionTimer = ATTACK_LIGHT_DUR;
+      combat.heat = Math.min(100, combat.heat + 12);
+      combat.sharpness = Math.max(0, combat.sharpness - 4);
+
+      const fx = -Math.sin(playerRoot.rotation.y);
+      const fz = -Math.cos(playerRoot.rotation.y);
+      playerRoot.position.x += fx * 0.32;
+      playerRoot.position.z += fz * 0.32;
+
+      applyHitToEnemy(1.0, '鍵1 輕斬');
+      syncCombatHud();
+    }
+
+    // 鍵 2：重擊（高破部位）
+    function triggerHeavyAttack() {
+      if (actionLock) return;
+      actionLock = 'heavy';
+      actionDuration = ATTACK_HEAVY_DUR;
+      actionTimer = ATTACK_HEAVY_DUR;
+      combat.heat = Math.min(100, combat.heat + 22);
+      combat.sharpness = Math.max(0, combat.sharpness - 9);
+
+      const fx = -Math.sin(playerRoot.rotation.y);
+      const fz = -Math.cos(playerRoot.rotation.y);
+      playerRoot.position.x += fx * 0.55;
+      playerRoot.position.z += fz * 0.55;
+
+      applyHitToEnemy(2.4, '鍵2 重擊破晶');
+      syncCombatHud();
+    }
+
+    // 鍵 3：閃避
+    function triggerDodge() {
+      if (actionLock || combat.dodgeCooldown > 0) return;
+      const tier = WEIGHT_TIERS[combat.weightIdx];
+      actionLock = 'dodge';
+      actionDuration = 0.26;
+      actionTimer = 0.26;
+      dashTimer = 0.26;
+      combat.dodgeCooldown = tier.dashCd;
+      combat.heat = Math.max(0, combat.heat - 5);
+      setStatus(`狀態：鍵3 閃避（${tier.label}衝刺）`);
+      syncCombatHud();
+    }
+
+    // 鍵 4：晶刃解放／冷卻回鋒
+    function triggerReleaseOrCool() {
+      if (actionLock) return;
+      actionLock = 'release';
+      actionDuration = RELEASE_DUR;
+      actionTimer = RELEASE_DUR;
+
+      if (combat.heat >= 35) {
+        const spentHeat = combat.heat;
+        combat.heat = 0;
+        combat.sharpness = Math.min(100, combat.sharpness + 18);
+        applyHitToEnemy(1.5 + (spentHeat / 100) * 2.5, `鍵4 晶刃解放(耗熱${Math.round(spentHeat)})`);
+      } else {
+        combat.sharpness = Math.min(100, combat.sharpness + 25);
+        combat.heat = Math.max(0, combat.heat - 15);
+        setStatus('狀態：鍵4 晶刃回鋒冷卻（鋒利度回復）');
+      }
+      syncCombatHud();
+    }
+
+    // 鍵 5：格擋（按住／切換）
+    function setGuarding(active) {
+      combat.guarding = active;
+      const btn5 = document.getElementById('key-5');
+      btn5.classList.toggle('active', active);
+      if (active) {
+        const tier = WEIGHT_TIERS[combat.weightIdx];
+        setStatus(`狀態：鍵5 格擋架招中（負重後退係數 ${tier.guardPush}）`);
       }
     }
 
-    const btnDodge = document.getElementById('btn-dodge');
-    const btnAttack = document.getElementById('btn-attack');
-    btnDodge.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); triggerDodge(); });
-    btnAttack.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); triggerAttack(); });
+    // 鍵 6：鎖定目標切換
+    function toggleLockTarget() {
+      combat.lockedTarget = !combat.lockedTarget;
+      lockRing.visible = combat.lockedTarget;
+      const btn6 = document.getElementById('key-6');
+      btn6.classList.toggle('locked', combat.lockedTarget);
+      setStatus(`狀態：鍵6 ${combat.lockedTarget ? '已鎖定目標' : '解除鎖定'}`);
+    }
 
+    // 鍵 7：負重狀態循環切換
+    function cycleWeightTier() {
+      combat.weightIdx = (combat.weightIdx + 1) % WEIGHT_TIERS.length;
+      const tier = WEIGHT_TIERS[combat.weightIdx];
+      syncCombatHud();
+      setStatus(`狀態：鍵7 切換負重 → ${tier.label}（移速 ${tier.moveMult}x）`);
+    }
+
+    // 綁定 7 個按鍵觸控／點擊
+    document.getElementById('key-1').addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); triggerLightAttack(); });
+    document.getElementById('key-2').addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); triggerHeavyAttack(); });
+    document.getElementById('key-3').addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); triggerDodge(); });
+    document.getElementById('key-4').addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); triggerReleaseOrCool(); });
+
+    const btn5 = document.getElementById('key-5');
+    btn5.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); setGuarding(!combat.guarding); });
+
+    document.getElementById('key-6').addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); toggleLockTarget(); });
+    document.getElementById('key-7').addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); cycleWeightTier(); });
+
+    // 鍵盤對應：1~7 或 J/U/K/I/L/O/P
     const keys = {};
     window.addEventListener('keydown', (e) => {
+      if (e.repeat) return;
       keys[e.code] = true;
-      if (e.code === 'KeyJ') triggerAttack();
-      if (e.code === 'KeyK') triggerDodge();
+      if (e.code === 'Digit1' || e.code === 'KeyJ') triggerLightAttack();
+      if (e.code === 'Digit2' || e.code === 'KeyU') triggerHeavyAttack();
+      if (e.code === 'Digit3' || e.code === 'KeyK' || e.code === 'Space') triggerDodge();
+      if (e.code === 'Digit4' || e.code === 'KeyI') triggerReleaseOrCool();
+      if (e.code === 'Digit5' || e.code === 'KeyL') setGuarding(true);
+      if (e.code === 'Digit6' || e.code === 'KeyO') toggleLockTarget();
+      if (e.code === 'Digit7' || e.code === 'KeyP') cycleWeightTier();
     });
-    window.addEventListener('keyup', (e) => { keys[e.code] = false; });
+    window.addEventListener('keyup', (e) => {
+      keys[e.code] = false;
+      if (e.code === 'Digit5' || e.code === 'KeyL') setGuarding(false);
+    });
 
     function lerpAngle(current, target, alpha) {
       let diff = target - current;
@@ -671,7 +785,7 @@
       return current + diff * alpha;
     }
 
-    function clampRot(val, limit = 1.25) {
+    function clampRot(val, limit = 1.35) {
       return Math.max(-limit, Math.min(limit, val));
     }
 
@@ -682,43 +796,118 @@
       bone.rotation.z = lerpAngle(bone.rotation.z, clampRot(rz), alpha);
     }
 
-    function applyFallbackWhenNoFbx(isMoving, delta) {
+    function applyStablePose(isMoving, delta) {
       const blend = Math.min(1, delta * 13);
       const breathe = Math.sin(idlePhase);
 
-      if (!currentVrm || !currentVrm.humanoid) return;
-      const h = currentVrm.humanoid;
-      const hips = h.getNormalizedBoneNode('hips');
-      if (hips) hips.rotation.set(0, 0, 0);
+      playerRoot.position.y = 0;
+      playerVisual.position.set(0, 0, 0);
+      playerVisual.rotation.set(0, 0, 0);
+      slashArc.visible = false;
 
-      const hasActiveClip =
-        (lockedSlotKey === 'dodge' && fbxSlots.dodge.action) ||
-        (lockedSlotKey === 'attack' && fbxSlots.attack.action) ||
-        (!lockedSlotKey && isMoving && fbxSlots.walk.action) ||
-        (!lockedSlotKey && !isMoving && fbxSlots.idle.action);
+      if (!attachedToHand) {
+        crimsonSword.position.set(-0.46, 0.85, -0.15);
+        crimsonSword.rotation.set(1.25, 0, 0);
+      }
 
-      if (hasActiveClip) return;
+      if (actionLock === 'light' || actionLock === 'heavy' || actionLock === 'release') {
+        const p = 1 - actionTimer / Math.max(actionDuration, 0.01);
+        const swingSpan = actionLock === 'heavy' ? 1.85 : 1.35;
+        playerVisual.rotation.y = (0.35 - p) * (actionLock === 'heavy' ? 0.85 : 0.55);
+        slashArc.visible = p >= 0.18 && p <= 0.72;
+        slashArc.scale.setScalar(actionLock === 'heavy' ? 1.28 : (actionLock === 'release' ? 1.4 : 1.0));
+        slashArc.rotation.z = -0.5 + p * swingSpan;
+        if (!attachedToHand) {
+          crimsonSword.position.set(-0.25, 1.25 - p * 0.35, -0.55);
+          crimsonSword.rotation.set(-1.2 + p * 2.2, 0, -0.45 + p * 0.9);
+        }
+      } else if (isMoving) {
+        playerVisual.position.y = Math.abs(Math.sin(walkPhase)) * 0.02;
+      }
 
-      const lArm = h.getNormalizedBoneNode('leftUpperArm');
-      const rArm = h.getNormalizedBoneNode('rightUpperArm');
-      const lForearm = h.getNormalizedBoneNode('leftLowerArm');
-      const rForearm = h.getNormalizedBoneNode('rightLowerArm');
-      const lLeg = h.getNormalizedBoneNode('leftUpperLeg');
-      const rLeg = h.getNormalizedBoneNode('rightUpperLeg');
+      if (currentVrm && currentVrm.humanoid) {
+        const h = currentVrm.humanoid;
+        const hips = h.getNormalizedBoneNode('hips');
+        const spine = h.getNormalizedBoneNode('spine');
+        const chest = h.getNormalizedBoneNode('chest');
+        const head = h.getNormalizedBoneNode('head');
+        const lArm = h.getNormalizedBoneNode('leftUpperArm');
+        const rArm = h.getNormalizedBoneNode('rightUpperArm');
+        const lForearm = h.getNormalizedBoneNode('leftLowerArm');
+        const rForearm = h.getNormalizedBoneNode('rightLowerArm');
+        const lLeg = h.getNormalizedBoneNode('leftUpperLeg');
+        const rLeg = h.getNormalizedBoneNode('rightUpperLeg');
+        const lKnee = h.getNormalizedBoneNode('leftLowerLeg');
+        const rKnee = h.getNormalizedBoneNode('rightLowerLeg');
 
-      if (isMoving) {
-        const s = Math.sin(walkPhase);
-        smoothBoneRot(lLeg, -s * 0.42, 0, 0, blend);
-        smoothBoneRot(rLeg, s * 0.42, 0, 0, blend);
-        smoothBoneRot(lArm, s * 0.28, 0, -1.2, blend);
-        smoothBoneRot(rArm, -s * 0.25, 0, 1.2, blend);
-      } else {
-        smoothBoneRot(lArm, breathe * 0.03, 0, -1.2, blend);
-        smoothBoneRot(rArm, -0.14 - breathe * 0.03, 0, 1.2, blend);
-        smoothBoneRot(lForearm, -0.16, 0, 0, blend);
-        smoothBoneRot(rForearm, -0.34, 0, 0, blend);
-        smoothBoneRot(lLeg, 0, 0, 0, blend);
-        smoothBoneRot(rLeg, 0, 0, 0, blend);
+        smoothBoneRot(hips, 0, 0, 0, blend);
+
+        const leftDownZ = -1.2;
+        const rightDownZ = 1.2;
+
+        if (actionLock === 'light' || actionLock === 'heavy' || actionLock === 'release') {
+          const p = 1 - actionTimer / Math.max(actionDuration, 0.01);
+          const windup = actionLock === 'heavy' ? -1.32 : -1.05;
+          const swing = p < 0.28 ? windup * (p / 0.28) : windup + ((p - 0.28) / 0.72) * 1.85;
+          smoothBoneRot(spine, 0.06, (0.3 - p) * 0.4, 0, blend);
+          smoothBoneRot(chest, 0.05, 0, 0, blend);
+          smoothBoneRot(head, 0, 0, 0, blend);
+          smoothBoneRot(rArm, swing, 0, rightDownZ * 0.25, blend);
+          smoothBoneRot(rForearm, -0.28, 0, 0, blend);
+          smoothBoneRot(lArm, 0.22, 0, leftDownZ, blend);
+          smoothBoneRot(lForearm, -0.22, 0, 0, blend);
+          smoothBoneRot(lLeg, 0.14, 0, 0, blend);
+          smoothBoneRot(rLeg, -0.14, 0, 0, blend);
+          smoothBoneRot(lKnee, 0.12, 0, 0, blend);
+          smoothBoneRot(rKnee, 0.12, 0, 0, blend);
+        } else if (actionLock === 'dodge') {
+          smoothBoneRot(spine, 0.1, 0, 0, blend);
+          smoothBoneRot(chest, 0.05, 0, 0, blend);
+          smoothBoneRot(head, 0, 0, 0, blend);
+          smoothBoneRot(lArm, 0.25, 0, leftDownZ, blend);
+          smoothBoneRot(rArm, 0.25, 0, rightDownZ, blend);
+          smoothBoneRot(lForearm, -0.25, 0, 0, blend);
+          smoothBoneRot(rForearm, -0.35, 0, 0, blend);
+          smoothBoneRot(lLeg, -0.24, 0, 0, blend);
+          smoothBoneRot(rLeg, 0.2, 0, 0, blend);
+          smoothBoneRot(lKnee, 0.2, 0, 0, blend);
+          smoothBoneRot(rKnee, 0.14, 0, 0, blend);
+        } else if (combat.guarding) {
+          smoothBoneRot(spine, 0.04, 0, 0, blend);
+          smoothBoneRot(chest, 0.04, 0, 0, blend);
+          smoothBoneRot(rArm, -0.55, 0, rightDownZ * 0.45, blend);
+          smoothBoneRot(rForearm, -0.65, 0, 0, blend);
+          smoothBoneRot(lArm, -0.35, 0, leftDownZ * 0.65, blend);
+          smoothBoneRot(lForearm, -0.5, 0, 0, blend);
+          smoothBoneRot(lLeg, 0.12, 0, 0, blend);
+          smoothBoneRot(rLeg, -0.12, 0, 0, blend);
+        } else if (isMoving) {
+          const s = Math.sin(walkPhase);
+          const c = Math.cos(walkPhase);
+          smoothBoneRot(lLeg, -s * 0.45, 0, 0, blend);
+          smoothBoneRot(rLeg, s * 0.45, 0, 0, blend);
+          smoothBoneRot(lKnee, Math.max(0, -c) * 0.38, 0, 0, blend);
+          smoothBoneRot(rKnee, Math.max(0, c) * 0.38, 0, 0, blend);
+          smoothBoneRot(lArm, s * 0.32, 0, leftDownZ, blend);
+          smoothBoneRot(rArm, -s * 0.28, 0, rightDownZ, blend);
+          smoothBoneRot(lForearm, -0.2, 0, 0, blend);
+          smoothBoneRot(rForearm, -0.32, 0, 0, blend);
+          smoothBoneRot(spine, 0.03, -s * 0.04, 0, blend);
+          smoothBoneRot(chest, 0, 0, 0, blend);
+          smoothBoneRot(head, 0, 0, 0, blend);
+        } else {
+          smoothBoneRot(lArm, breathe * 0.03, 0, leftDownZ, blend);
+          smoothBoneRot(rArm, -0.14 - breathe * 0.03, 0, rightDownZ, blend);
+          smoothBoneRot(lForearm, -0.16, 0, 0, blend);
+          smoothBoneRot(rForearm, -0.34, 0, 0, blend);
+          smoothBoneRot(spine, breathe * 0.015, 0, 0, blend);
+          smoothBoneRot(chest, breathe * 0.015, 0, 0, blend);
+          smoothBoneRot(head, 0, Math.sin(idlePhase * 0.5) * 0.03, 0, blend);
+          smoothBoneRot(lLeg, 0, 0, 0, blend);
+          smoothBoneRot(rLeg, 0, 0, 0, blend);
+          smoothBoneRot(lKnee, 0, 0, 0, blend);
+          smoothBoneRot(rKnee, 0, 0, 0, blend);
+        }
       }
     }
 
@@ -730,59 +919,63 @@
     let frameCount = 0;
     let fpsTimer = 0;
 
-    setStatus('狀態：就緒（單次動作鎖定測試中）');
+    setStatus('狀態：就緒（橫向 7 鍵與戰鬥原型）');
 
     function animate() {
       requestAnimationFrame(animate);
       const delta = Math.min(clock.getDelta(), 0.05);
       idlePhase += delta * 2.0;
 
+      if (combat.dodgeCooldown > 0) {
+        combat.dodgeCooldown = Math.max(0, combat.dodgeCooldown - delta);
+      }
+
+      // 熱度自然微幅散熱（未攻擊時）
+      if (!actionLock && combat.heat > 0) {
+        combat.heat = Math.max(0, combat.heat - delta * 2.2);
+        syncCombatHud();
+      }
+
+      const tier = WEIGHT_TIERS[combat.weightIdx];
       let ix = moveInput.x + (keys['KeyD'] ? 1 : 0) - (keys['KeyA'] ? 1 : 0);
       let iz = moveInput.z + (keys['KeyS'] ? 1 : 0) - (keys['KeyW'] ? 1 : 0);
       const len = Math.hypot(ix, iz);
       if (len > 1) { ix /= len; iz /= len; }
 
-      const isMoving = len > 0.05;
+      const isMoving = len > 0.05 && !combat.guarding;
       if (isMoving) {
-        walkPhase += delta * 10;
+        walkPhase += delta * 10 * tier.moveMult;
         targetYaw = Math.atan2(-ix, -iz);
       } else {
         walkPhase = 0;
       }
 
-      if (dashTimer > 0) {
-        const forwardX = -Math.sin(playerRoot.rotation.y);
-        const forwardZ = -Math.cos(playerRoot.rotation.y);
-        playerRoot.position.x += forwardX * 11.5 * delta;
-        playerRoot.position.z += forwardZ * 11.5 * delta;
-        dashTimer = Math.max(0, dashTimer - delta);
-        if (dashTimer === 0 && lockedSlotKey === 'dodge') lockedSlotKey = null;
-      } else if (isMoving) {
-        playerRoot.position.x += ix * 4.8 * delta;
-        playerRoot.position.z += iz * 4.8 * delta;
-        playerRoot.rotation.y = lerpAngle(playerRoot.rotation.y, targetYaw, Math.min(1, delta * 12));
+      if (combat.lockedTarget) {
+        const dxToEnemy = enemyRoot.position.x - playerRoot.position.x;
+        const dzToEnemy = enemyRoot.position.z - playerRoot.position.z;
+        targetYaw = Math.atan2(-dxToEnemy, -dzToEnemy);
+        playerRoot.rotation.y = lerpAngle(playerRoot.rotation.y, targetYaw, Math.min(1, delta * 10));
       }
 
-      if (attackTimer > 0) {
-        attackTimer = Math.max(0, attackTimer - delta);
-        if (attackTimer === 0 && lockedSlotKey === 'attack') lockedSlotKey = null;
-      }
-
-      if (!lockedSlotKey) {
-        if (isMoving) {
-          if (!playFbxSlot('walk', 0.14)) {
-            playFbxSlot('idle', 0.14);
-          }
-        } else {
-          playFbxSlot('idle', 0.16);
+      if (actionTimer > 0) {
+        actionTimer = Math.max(0, actionTimer - delta);
+        if (actionTimer === 0) {
+          actionLock = null;
         }
       }
 
-      slashArc.visible = lockedSlotKey === 'attack';
-      if (slashArc.visible) {
-        const total = fbxSlots.attack.duration > 0 ? Math.min(fbxSlots.attack.duration, 1.4) : DEFAULT_ATTACK_DURATION;
-        const p = 1 - attackTimer / Math.max(total, 0.01);
-        slashArc.rotation.z = -0.4 + p * 1.4;
+      if (dashTimer > 0) {
+        const fx = -Math.sin(playerRoot.rotation.y);
+        const fz = -Math.cos(playerRoot.rotation.y);
+        playerRoot.position.x += fx * tier.dashSpeed * delta;
+        playerRoot.position.z += fz * tier.dashSpeed * delta;
+        dashTimer = Math.max(0, dashTimer - delta);
+      } else if (isMoving && !actionLock) {
+        playerRoot.position.x += ix * 4.8 * tier.moveMult * delta;
+        playerRoot.position.z += iz * 4.8 * tier.moveMult * delta;
+        if (!combat.lockedTarget) {
+          playerRoot.rotation.y = lerpAngle(playerRoot.rotation.y, targetYaw, Math.min(1, delta * 12));
+        }
       }
 
       const distFromCenter = Math.hypot(playerRoot.position.x, playerRoot.position.z);
@@ -793,6 +986,7 @@
       }
 
       enemyBody.rotation.y += delta * 0.6;
+      if (lockRing.visible) lockRing.rotation.z += delta * 1.8;
       if (enemyHitFlash > 0) {
         enemyHitFlash -= delta;
         enemyBody.material.color.setHex(0xef4444);
@@ -800,30 +994,9 @@
         enemyBody.material.color.setHex(0x475569);
       }
 
+      applyStablePose(isMoving, delta);
+      if (currentVrm) currentVrm.update(delta);
       playerRoot.position.y = 0;
-      playerVisual.position.set(0, 0, 0);
-      playerVisual.rotation.set(0, 0, 0);
-
-      applyFallbackWhenNoFbx(isMoving, delta);
-      if (fbxMixer) fbxMixer.update(delta);
-      if (currentVrm) {
-        currentVrm.update(delta);
-        if (attachedToHand) {
-          const rightHand = currentVrm.humanoid?.getNormalizedBoneNode('rightHand');
-          if (rightHand && crimsonSword.parent !== rightHand) {
-            rightHand.add(crimsonSword);
-          }
-        }
-      }
-
-      const curKey = lockedSlotKey || (isMoving ? 'walk' : 'idle');
-      const labelMap = {
-        idle: fbxSlots.idle.action ? 'FBX Idle' : '內建待機',
-        walk: fbxSlots.walk.action ? 'FBX Walking' : '內建走路',
-        attack: fbxSlots.attack.action ? 'FBX Slash' : '斬擊判定',
-        dodge: fbxSlots.dodge.action ? 'FBX Dodge' : '閃避衝刺'
-      };
-      curAnimEl.textContent = labelMap[curKey] || '內建姿態';
 
       camera.position.x += (playerRoot.position.x - camera.position.x) * 8 * delta;
       camera.position.z += (playerRoot.position.z + 6.5 - camera.position.z) * 8 * delta;
