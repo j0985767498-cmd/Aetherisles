@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>雲海群島 - 階段一穩定操作與晶刃大劍測試</title>
+  <title>雲海群島 - FBX 動作連線診斷與穩定測試</title>
   <style>
     * { box-sizing: border-box; user-select: none; -webkit-user-select: none; margin: 0; padding: 0; }
     html, body { width: 100%; height: 100%; overflow: hidden; background: #000000; font-family: sans-serif; touch-action: none; }
@@ -12,9 +12,9 @@
 
     #hud-stats {
       position: absolute; top: 12px; right: 12px; z-index: 10;
-      background: rgba(15, 23, 42, 0.82); color: #e2e8f0;
+      background: rgba(15, 23, 42, 0.85); color: #e2e8f0;
       padding: 8px 12px; border-radius: 8px; font-size: 12px; line-height: 1.5;
-      border: 1px solid rgba(255,255,255,0.15); pointer-events: none;
+      border: 1px solid rgba(255,255,255,0.15); pointer-events: none; max-width: 45vw;
     }
     .stat-good { color: #4ade80; font-weight: bold; }
     .stat-warn { color: #facc15; font-weight: bold; }
@@ -22,9 +22,9 @@
 
     #hud-status {
       position: absolute; top: 12px; left: 12px; z-index: 10;
-      background: rgba(15, 23, 42, 0.88); color: #cbd5e1;
-      padding: 8px 12px; border-radius: 8px; font-size: 12px; max-width: 72vw;
-      border: 1px solid rgba(255,255,255,0.15); word-break: break-word;
+      background: rgba(15, 23, 42, 0.9); color: #cbd5e1;
+      padding: 8px 12px; border-radius: 8px; font-size: 12px; max-width: 52vw;
+      border: 1px solid rgba(255,255,255,0.15); word-break: break-word; line-height: 1.45;
     }
     .file-row { margin-top: 6px; font-size: 11px; color: #93c5fd; }
     .file-row label { display: block; margin-bottom: 2px; color: #cbd5e1; }
@@ -69,6 +69,7 @@
   <div id="canvas-container">
     <div id="hud-status">
       <div id="status-text">狀態：初始化中...</div>
+      <div id="fbx-report" style="margin-top:4px;font-size:11px;color:#fde68a;">FBX 連線檢查中...</div>
       <div class="file-row">
         <label for="vrm-upload">VRM 角色檔：</label>
         <input type="file" id="vrm-upload" accept=".vrm" />
@@ -79,7 +80,7 @@
       <div>FPS: <span id="stat-fps" class="stat-good">--</span></div>
       <div>渲染倍率: <span id="stat-dpr">1.50</span></div>
       <div>Draw Calls: <span id="stat-calls">0</span></div>
-      <div>骨架狀態: <span class="stat-good">防翻轉穩定</span></div>
+      <div>骨架姿態: <span class="stat-good">防對折保護中</span></div>
     </div>
 
     <div id="joystick-zone"><div id="joystick-knob"></div></div>
@@ -90,7 +91,15 @@
   </div>
 
   <script type="module">
+    const GITHUB_FBX_FILES = {
+      idle: './Idle.fbx',
+      walk: './Walking.fbx',
+      attack: './Sword%20Slash.fbx',
+      dodge: './Dodge.fbx'
+    };
+
     const statusEl = document.getElementById('status-text');
+    const fbxReportEl = document.getElementById('fbx-report');
     function setStatus(msg, isError = false) {
       statusEl.textContent = msg;
       statusEl.style.color = isError ? '#fca5a5' : '#e2e8f0';
@@ -105,6 +114,7 @@
 
     import * as THREE from 'three';
     import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+    import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
     import { VRMLoaderPlugin } from '@pixiv/three-vrm';
 
     const container = document.getElementById('canvas-container');
@@ -282,6 +292,44 @@
     let attachedToHand = false;
     const vrmLoader = new GLTFLoader();
     vrmLoader.register((parser) => new VRMLoaderPlugin(parser));
+    const fbxLoader = new FBXLoader();
+
+    function probeFbx(slotKey, url) {
+      return new Promise((resolve) => {
+        fbxLoader.load(
+          url,
+          (group) => {
+            const clip = group.animations?.[0] || null;
+            resolve({
+              slotKey,
+              ok: Boolean(clip),
+              tracks: clip ? clip.tracks.length : 0,
+              sampleBone: clip?.tracks?.[0]?.name?.split('.')?.[0] || '無'
+            });
+          },
+          undefined,
+          (err) => {
+            resolve({
+              slotKey,
+              ok: false,
+              tracks: 0,
+              sampleBone: err?.message ? '載入失敗(404/CORS)' : '載入失敗'
+            });
+          }
+        );
+      });
+    }
+
+    async function checkGithubFbxConnection() {
+      const results = await Promise.all(
+        Object.entries(GITHUB_FBX_FILES).map(([k, url]) => probeFbx(k, url))
+      );
+      const lines = results.map((r) =>
+        `${r.slotKey}: ${r.ok ? `連線OK(${r.tracks}軌, ${r.sampleBone})` : `未連上(${r.sampleBone})`}`
+      );
+      fbxReportEl.textContent = lines.join(' | ');
+    }
+    checkGithubFbxConnection();
 
     function disposeObject3D(obj) {
       obj.traverse((node) => {
@@ -604,7 +652,7 @@
     let frameCount = 0;
     let fpsTimer = 0;
 
-    setStatus('狀態：就緒（穩定操作版）');
+    setStatus('狀態：就緒（FBX 連線檢查中）');
 
     function animate() {
       requestAnimationFrame(animate);
