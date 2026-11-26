@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>雲海群島 - 階段一效能與手感測試</title>
+  <title>雲海群島 - 階段一測試（model 4.vrm）</title>
   <style>
     * { box-sizing: border-box; user-select: none; -webkit-user-select: none; margin: 0; padding: 0; }
     html, body { width: 100%; height: 100%; overflow: hidden; background: #1a2639; font-family: sans-serif; touch-action: none; }
@@ -25,10 +25,10 @@
     #hud-status {
       position: absolute; top: 12px; left: 12px;
       background: rgba(15, 23, 42, 0.78); color: #cbd5e1;
-      padding: 8px 12px; border-radius: 8px; font-size: 12px;
+      padding: 8px 12px; border-radius: 8px; font-size: 12px; max-width: 62vw;
       border: 1px solid rgba(255,255,255,0.15);
     }
-    #vrm-upload { margin-top: 6px; font-size: 11px; color: #93c5fd; display: block; }
+    #vrm-upload { margin-top: 6px; font-size: 11px; color: #93c5fd; display: block; max-width: 100%; }
 
     /* 左下角虛擬搖桿 */
     #joystick-zone {
@@ -51,12 +51,12 @@
     .btn-action {
       border-radius: 50%; border: 2px solid rgba(255,255,255,0.35);
       color: #fff; font-weight: bold; display: flex; align-items: center; justify-content: center;
-      background: rgba(30, 41, 59, 0.75); active: scale(0.92);
+      background: rgba(30, 41, 59, 0.75);
     }
+    .btn-action:active { transform: scale(0.92); }
     #btn-dodge { width: 62px; height: 62px; font-size: 13px; }
-    #btn-attack { width: 78px; height: 78px; font-size: 15px; background: rgba(220, 38, 38, 0.7); }
+    #btn-attack { width: 78px; height: 78px; font-size: 15px; background: rgba(220, 38, 38, 0.72); }
   </style>
-  <!-- Import Map: 鎖定穩定版 Three.js 與 @pixiv/three-vrm -->
   <script type="importmap">
     {
       "imports": {
@@ -70,7 +70,7 @@
 <body>
   <div id="canvas-container">
     <div id="hud-status">
-      <div id="status-text">狀態：等待載入 VRM（預設使用替身）</div>
+      <div id="status-text">狀態：正在載入 model 4.vrm...</div>
       <input type="file" id="vrm-upload" accept=".vrm" />
     </div>
 
@@ -102,11 +102,10 @@
     camera.position.set(0, 3.2, 6.5);
 
     const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
-    renderer.shadowMap.enabled = false; // 手機端強制關閉即時陰影貼圖
+    renderer.shadowMap.enabled = false;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     container.appendChild(renderer.domElement);
 
-    // 動態解析度參數
     const MAX_DPR = Math.min(window.devicePixelRatio || 1, 1.5);
     const MIN_DPR = 0.85;
     let currentDpr = MAX_DPR;
@@ -122,7 +121,7 @@
     syncRendererSize();
     window.addEventListener('resize', syncRendererSize);
 
-    // === 2. 日系明亮燈光（無即時陰影開銷） ===
+    // === 2. 日系明亮燈光 ===
     const hemiLight = new THREE.HemisphereLight(0xffffff, 0x6b7c93, 1.35);
     scene.add(hemiLight);
 
@@ -130,7 +129,7 @@
     dirLight.position.set(5, 10, 6);
     scene.add(dirLight);
 
-    // === 3. 浮空島測試場地與圓形假陰影產生器 ===
+    // === 3. 浮空島測試場地與圓形假陰影 ===
     const islandGeo = new THREE.CylinderGeometry(14, 11, 2, 24);
     const islandMat = new THREE.MeshLambertMaterial({ color: 0x6b8e5e });
     const island = new THREE.Mesh(islandGeo, islandMat);
@@ -148,7 +147,7 @@
       const canvas = document.createElement('canvas');
       canvas.width = size; canvas.height = size;
       const ctx = canvas.getContext('2d');
-      const grad = ctx.createRadialGradient(size/2, size/2, 2, size/2, size/2, size/2);
+      const grad = ctx.createRadialGradient(size / 2, size / 2, 2, size / 2, size / 2, size / 2);
       grad.addColorStop(0, 'rgba(0, 0, 0, 0.48)');
       grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
       ctx.fillStyle = grad;
@@ -163,13 +162,11 @@
       return mesh;
     }
 
-    // === 4. 玩家角色容器（支援動態替換 VRM 並釋放舊資源） ===
+    // === 4. 玩家角色容器（自動載入 ./model 4.vrm） ===
     const playerRoot = new THREE.Group();
     scene.add(playerRoot);
-    const playerShadow = createBlobShadow(0.6);
-    playerRoot.add(playerShadow);
+    playerRoot.add(createBlobShadow(0.6));
 
-    // 預設替身（尚未上傳 VRM 時顯示）
     const placeholderMesh = new THREE.Mesh(
       new THREE.CapsuleGeometry(0.32, 1.0, 4, 12),
       new THREE.MeshLambertMaterial({ color: 0x38bdf8 })
@@ -181,49 +178,48 @@
     const loader = new GLTFLoader();
     loader.register((parser) => new VRMLoaderPlugin(parser));
 
-    function loadVRMFromUrl(url) {
-      document.getElementById('status-text').textContent = '狀態：正在載入 VRM...';
+    function loadVRMFromUrl(url, label = 'model 4.vrm') {
+      document.getElementById('status-text').textContent = `狀態：正在載入 ${label}...`;
       loader.load(
         url,
         (gltf) => {
           const vrm = gltf.userData.vrm;
           if (!vrm) return;
 
-          // 釋放舊 VRM 記憶體（防止 iOS Safari 爆記憶體）
           if (currentVrm) {
             playerRoot.remove(currentVrm.scene);
             VRMUtils.deepDispose(currentVrm.scene);
-          } else {
+          } else if (placeholderMesh.parent) {
             playerRoot.remove(placeholderMesh);
           }
 
           VRMUtils.removeUnnecessaryVertices(gltf.scene);
           VRMUtils.removeUnnecessaryJoints(gltf.scene);
 
-          vrm.scene.rotation.y = Math.PI; // VRM 預設面向 +Z，轉向 -Z 前方
+          vrm.scene.rotation.y = Math.PI;
           playerRoot.add(vrm.scene);
           currentVrm = vrm;
-          document.getElementById('status-text').textContent = '狀態：VRM 已載入（實機壓測中）';
+          document.getElementById('status-text').textContent = `狀態：${label} 已載入`;
         },
         undefined,
         (err) => {
           console.error(err);
-          document.getElementById('status-text').textContent = '狀態：VRM 載入失敗，請確認檔案格式';
+          document.getElementById('status-text').textContent = `狀態：找不到 ${label}，可手動選檔`;
         }
       );
     }
 
-    // 支援直接選取本機 .vrm 檔測試（也可把網址改成你 GitHub 上的預設 .vrm 路徑）
+    // 預設自動載入同目錄下的 model 4.vrm
+    loadVRMFromUrl('./model%204.vrm', 'model 4.vrm');
+
     document.getElementById('vrm-upload').addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (!file) return;
       const url = URL.createObjectURL(file);
-      loadVRMFromUrl(url);
+      loadVRMFromUrl(url, file.name);
     });
-    // 若你的 GitHub repo 裡已有 model.vrm，取消下面這行註解即可自動載入：
-    // loadVRMFromUrl('./model.vrm');
 
-    // === 5. 輕量 GLB/低面數測試怪（非 VRM，包含可破壞弱點部件） ===
+    // === 5. 輕量測試怪（含可破壞弱點部件） ===
     const enemyRoot = new THREE.Group();
     enemyRoot.position.set(0, 0, -4.5);
     scene.add(enemyRoot);
@@ -236,7 +232,6 @@
     enemyBody.position.y = 1.1;
     enemyRoot.add(enemyBody);
 
-    // 可破壞部位（頭部角晶）
     const hornMat = new THREE.MeshLambertMaterial({ color: 0xf59e0b });
     const enemyHorn = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.9, 6), hornMat);
     enemyHorn.position.set(0, 2.25, 0.2);
@@ -253,4 +248,152 @@
 
     joyZone.addEventListener('touchstart', (e) => {
       const touch = e.changedTouches[0];
-      joyTouch
+      joyTouchId = touch.identifier;
+      updateJoystick(touch);
+    });
+    joyZone.addEventListener('touchmove', (e) => {
+      for (const touch of e.changedTouches) {
+        if (touch.identifier === joyTouchId) updateJoystick(touch);
+      }
+    });
+    const resetJoystick = (e) => {
+      for (const touch of e.changedTouches) {
+        if (touch.identifier === joyTouchId) {
+          joyTouchId = null;
+          moveInput.x = 0; moveInput.z = 0;
+          joyKnob.style.transform = 'translate(0px, 0px)';
+        }
+      }
+    };
+    joyZone.addEventListener('touchend', resetJoystick);
+    joyZone.addEventListener('touchcancel', resetJoystick);
+
+    function updateJoystick(touch) {
+      const rect = joyZone.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      const maxR = rect.width / 2 - 10;
+      let dx = touch.clientX - cx;
+      let dy = touch.clientY - cy;
+      const dist = Math.hypot(dx, dy);
+      if (dist > maxR) {
+        dx = (dx / dist) * maxR;
+        dy = (dy / dist) * maxR;
+      }
+      joyKnob.style.transform = `translate(${dx}px, ${dy}px)`;
+      moveInput.x = dx / maxR;
+      moveInput.z = dy / maxR;
+    }
+
+    const keys = {};
+    window.addEventListener('keydown', (e) => {
+      keys[e.code] = true;
+      if (e.code === 'KeyJ') triggerAttack();
+      if (e.code === 'KeyK') triggerDodge();
+    });
+    window.addEventListener('keyup', (e) => { keys[e.code] = false; });
+
+    let dashTimer = 0;
+    let attackTimer = 0;
+
+    function triggerDodge() {
+      if (dashTimer <= 0) dashTimer = 0.22;
+    }
+    function triggerAttack() {
+      if (attackTimer > 0) return;
+      attackTimer = 0.28;
+      const dist = playerRoot.position.distanceTo(enemyRoot.position);
+      if (dist < 2.6) {
+        enemyHitFlash = 0.15;
+        if (hornHp > 0) {
+          hornHp--;
+          if (hornHp === 0) {
+            enemyRoot.remove(enemyHorn);
+            enemyHorn.geometry.dispose();
+            hornMat.dispose();
+            document.getElementById('status-text').textContent = '狀態：部位破壞達成！角晶已摧毀';
+          }
+        }
+      }
+    }
+
+    document.getElementById('btn-dodge').addEventListener('touchstart', (e) => { e.preventDefault(); triggerDodge(); });
+    document.getElementById('btn-attack').addEventListener('touchstart', (e) => { e.preventDefault(); triggerAttack(); });
+
+    // === 7. 主迴圈與即時幀率動態解析度調整 ===
+    const clock = new THREE.Clock();
+    const fpsEl = document.getElementById('stat-fps');
+    const dprEl = document.getElementById('stat-dpr');
+    const callsEl = document.getElementById('stat-calls');
+
+    let frameCount = 0;
+    let fpsTimer = 0;
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const delta = Math.min(clock.getDelta(), 0.05);
+
+      let ix = moveInput.x + (keys['KeyD'] ? 1 : 0) - (keys['KeyA'] ? 1 : 0);
+      let iz = moveInput.z + (keys['KeyS'] ? 1 : 0) - (keys['KeyW'] ? 1 : 0);
+      const len = Math.hypot(ix, iz);
+      if (len > 1) { ix /= len; iz /= len; }
+
+      const speed = dashTimer > 0 ? 12.5 : 4.8;
+      if (dashTimer > 0) dashTimer -= delta;
+      if (attackTimer > 0) attackTimer -= delta;
+
+      if (len > 0.05) {
+        playerRoot.position.x += ix * speed * delta;
+        playerRoot.position.z += iz * speed * delta;
+        playerRoot.rotation.y = Math.atan2(-ix, -iz);
+      }
+
+      const distFromCenter = Math.hypot(playerRoot.position.x, playerRoot.position.z);
+      if (distFromCenter > 12.8) {
+        const ratio = 12.8 / distFromCenter;
+        playerRoot.position.x *= ratio;
+        playerRoot.position.z *= ratio;
+      }
+
+      enemyBody.rotation.y += delta * 0.6;
+      if (enemyHitFlash > 0) {
+        enemyHitFlash -= delta;
+        enemyBody.material.color.setHex(0xef4444);
+      } else {
+        enemyBody.material.color.setHex(0x475569);
+      }
+
+      if (currentVrm) currentVrm.update(delta);
+
+      camera.position.x += (playerRoot.position.x - camera.position.x) * 8 * delta;
+      camera.position.z += (playerRoot.position.z + 6.5 - camera.position.z) * 8 * delta;
+      camera.lookAt(playerRoot.position.x, 1.1, playerRoot.position.z);
+
+      renderer.render(scene, camera);
+
+      frameCount++;
+      fpsTimer += delta;
+      if (fpsTimer >= 1.0) {
+        const fps = Math.round(frameCount / fpsTimer);
+        fpsEl.textContent = fps;
+        fpsEl.className = fps >= 50 ? 'stat-good' : (fps >= 35 ? 'stat-warn' : 'stat-bad');
+        callsEl.textContent = renderer.info.render.calls;
+
+        if (fps < 45 && currentDpr > MIN_DPR) {
+          currentDpr = Math.max(MIN_DPR, +(currentDpr - 0.15).toFixed(2));
+          renderer.setPixelRatio(currentDpr);
+          dprEl.textContent = currentDpr.toFixed(2);
+        } else if (fps >= 56 && currentDpr < MAX_DPR) {
+          currentDpr = Math.min(MAX_DPR, +(currentDpr + 0.05).toFixed(2));
+          renderer.setPixelRatio(currentDpr);
+          dprEl.textContent = currentDpr.toFixed(2);
+        }
+
+        frameCount = 0;
+        fpsTimer = 0;
+      }
+    }
+    animate();
+  </script>
+</body>
+</html>
